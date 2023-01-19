@@ -1,0 +1,10 @@
+.vscode
+*.zip
+*.json
+creds.txt
+test.py
+*.java
+TextDetection
+testing-images
+videos
+__pycache__
