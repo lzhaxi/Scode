@@ -3,10 +3,10 @@
 *.json
 creds.txt
 test.py
-testg.py
 tess.py
 *.java
 TextDetection
 testing-images
 videos
+trainingdata
 __pycache__
