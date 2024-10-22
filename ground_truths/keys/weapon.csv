@@ -1,0 +1,73 @@
+id,weapon,shorthand
+0,Sploosh-O-Matic,Sploosh
+10,Splattershot Jr.,Jr
+20,Splash-O-Matic,Splash
+30,Aerospray MG,Aero
+40,Splattershot,Shot
+50,.52 Gal,52
+60,N-ZAP '85,Zap
+70,Splattershot Pro,Pro
+80,.96 Gal,96
+90,Jet Squelcher,Jet
+100,Splattershot Nova,Nova
+200,Luna Blaster,Luna
+210,Blaster,Blaster
+220,Range Blaster,Range
+230,Clash Blaster,Clash
+240,Rapid Blaster,Rapid
+250,Rapid Blaster Pro,Rapid Pro
+260,S-BLAST '92,S-Blast
+300,L-3 Nozzlenose,L-3
+310,H-3 Nozzlenose,H-3
+400,Squeezer,Squeezer
+1000,Carbon Roller,Carbon
+1010,Splat Roller,Roller
+1020,Dynamo Roller,Dynamo
+1030,Flingza Roller,Flingza
+1040,Big Swig Roller,Swig
+1100,Inkbrush,Inkbrush
+1110,Octobrush,Octobrush
+1120,Painbrush,Painbrush
+2000,Classic Squiffer,Squiffer
+2010,Splat Charger,Charger
+2030,E-liter 4K,E-liter
+2050,Bamboozler 14 Mk I,Bamboo
+2060,Goo Tuber,Goo
+2070,Snipewriter 5H,Pencil
+3000,Slosher,Slosher
+3010,Tri-slosher,Tri
+3020,Sloshing Machine,Machine
+3030,Bloblobber,Blob
+3040,Explosher,Explo
+3050,Dread Wringer,Dread
+4000,Mini Splatling,Mini
+4010,Heavy Splatling,Heavy
+4020,Hydra Splatling,Hydra
+4030,Ballpoint Splatling,Ballpoint
+4040,Nautilus 47,Naut
+4050,Heavy Edit Splatling,Edit
+5000,Dapple Dualies,Dapple
+5010,Splat Dualies,Dualies
+5020,Glooga Dualies,Glooga
+5030,Dualie Squelchers,Squelchies
+5040,Dark Tetra Dualies,Tetra
+5050,Douser Dualies FF,Douser
+6000,Splat Brella,Brella
+6010,Tenta Brella,Tent
+6020,Undercover Brella,Undercover
+6030,Recycled Brella 24 Mk I,Cycle
+7010,Tri-Stringer,Stringer
+7020,REEF-LUX 450,REEF-LUX
+7030,Wellstring V,Well
+8000,Splatana Stamper,Stamper
+8010,Splatana Wiper,Wiper
+8020,Mint Decavitator,Mint
+10000,Random,Random
+20900,Grizzco Blaster,GBlaster
+21900,Grizzco Roller,GRoller
+22900,Grizzco Charger,GCharger
+23900,Grizzco Slosher,GSlosher
+25900,Grizzco Dualies,GDualies
+26900,Grizzco Brella,GBrella
+27900,Grizzco Stringer,GBow
+28900,Grizzco Splatana,GSword

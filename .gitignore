@@ -1,0 +1,12 @@
+.vscode
+*.zip
+*.json
+creds.txt
+test.py
+tess.py
+videos
+pictures
+__pycache__
+old
+out
+testing-images

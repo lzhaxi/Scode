@@ -1,0 +1,445 @@
+function sortAndFindDuplicates() {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    range = sheet.getRange("A3:S")
+    range.sort(13)
+    vals = sheet.getRange("M3:M").getValues()
+    last = vals.filter(String).length
+    flag = false
+    flag_manual = true
+    for (let i = 0; i < last; i++) {
+        if (vals[i].toString() == vals[i + 1].toString()) {
+            console.log(vals[i] + (i + 3))
+        }
+    }
+}
+
+function longConvertToCellImage() {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    avals = sheet.getRange("A3:A").getValues()
+    alast = avals.filter(String).length
+    formulae = sheet.getRange("L3:L" + (alast + 2)).getFormulas()
+    toConvert = []
+    for (let i = 0; i < alast; i++) {
+        if (formulae[i] != '') {
+            toConvert = toConvert.concat(i)
+        }
+    }
+    if (toConvert.length == 0) {
+        console.log('All codes have been converted.')
+        files = DriveApp.getFolderById('1rz8aL7KwH6Ifiw1LmYRvrjMbvtFj_C98').getFiles()
+        if (files.hasNext()) {
+            console.log('There are unused code images. Deleting...')
+            while (files.hasNext()) {
+                file = files.next()
+                file.setTrashed(true)
+            }
+        }
+    } else {
+        LongRun.instance.setMaxExecutionSeconds(200);
+        executeLongRun("convertMain_", toConvert.length, toConvert, void(0), "longConvertToCellImage")
+    }
+}
+
+function convertMain_(index, toConvert) {
+    // toConvert is a list of row values that have an image formula
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    for (let i = 0; i < toConvert.length; i++) {
+        if (i == index) {
+            range = sheet.getRange(+toConvert[i] + 3, 12)
+            str = range.getFormula().toString()
+            url = str.slice(8, str.length - 2)
+            file = DriveApp.getFileById(str.slice(51, str.length - 2))
+            let image = SpreadsheetApp.newCellImage().setSourceUrl(url).build()
+            range.setValue(image)
+            file.setTrashed(true)
+            break
+        }
+    }
+}
+
+function addFormatting() {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    rotVals = sheet.getRange("B3:B").getValues()
+    last = rotVals.filter(String).length
+    rotRange = sheet.getRange("O3:O")
+    vals = rotRange.getValues()
+    for (let i = 0; i < last; i++) {
+        if (vals[i] == '') {
+            row = i + 3
+            weapRange = sheet.getRange("P" + row + ":S" + row)
+            rotation = rotVals[i].toString()
+            if (rotation.includes("Random")) {
+                if (rotation == "All Random" || rotation == "Gold Random") {
+                    rotRange.getCell(i + 1, 1).setValue("-")
+                } else {
+                    rotRange.getCell(i + 1, 1).setValue(formatHelper_(rotation.slice(11)))
+                    //11th index is first character after "1 Random + "
+                }
+                weapsRange = sheet.getRange("H" + row + ":K" + row) // original values
+                for (let i = 1; i <= 4; i++) {
+                    weapRange.getCell(1, i).setValue(formatHelper_(weapsRange.getCell(1, i).getValue().toString()))
+                }
+            } else {
+                for (let i = 1; i <= 4; i++) {
+                    weapRange.getCell(1, i).setValue("-")
+                }
+                rotRange.getCell(i + 1, 1).setValue(formatHelper_(rotation))
+            }
+        }
+    }
+}
+
+function formatHelper_(weaps) {
+    if (weaps == "-") {
+        return "-"
+    }
+    weapList = weaps.split(",")
+    result = ''
+    for (weap of weapList) {
+        result += '|'
+        result += weap.trim()
+        result += '|'
+    }
+    return result
+}
+
+function resetFilters() {
+    var searchSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Search');
+    searchSheet.getRange("B3").setValue(''); // Map Reset
+    searchSheet.getRange("E3").setValue(''); // Rotation Reset
+
+    searchSheet.getRange("A9:H9").setValue(''); // W1 Reset
+    searchSheet.getRange("A12:H12").setValue(''); // W2 Reset
+    searchSheet.getRange("A15:H15").setValue(''); // W3 Reset
+    searchSheet.getRange("B18:H18").setValue(''); // Xtra Reset
+
+    searchSheet.getRange("B21:B22").setValue(''); // Hazard Reset
+}
+
+
+
+
+//// Long Run File
+
+
+// Compiled using ts2gas 3.6.5 (TypeScript 4.3.2)
+var exports = exports || {};
+var module = module || { exports: exports };
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.executeLongRun = exports.LongRun = void 0;
+//import Properties = GoogleAppsScript.Properties.Properties;
+var LongRun = /** @class */ (function () {
+    /**
+     * Private constructor
+     * @private
+     */
+    function LongRun() {
+        /** start time map */
+        this.startTimeMap = {};
+    }
+    Object.defineProperty(LongRun, "instance", {
+        /**
+         * Returns singleton instance.
+         */
+        get: function () {
+            if (!this._instance) {
+                this._instance = new LongRun();
+            }
+            return this._instance;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    /**
+     * Returns if function is running now.
+     * @param funcName
+     */
+    LongRun.prototype.isRunning = function (funcName) {
+        // get spreadsheet properties
+        var properties = PropertiesService.getScriptProperties();
+        var running = properties.getProperty(LongRun.PREFIX_RUNNING + funcName);
+        return !(running == null || running === '');
+    };
+    /**
+     * Sets the function is running
+     * @param funcName
+     * @param running
+     */
+    LongRun.prototype.setRunning = function (funcName, running) {
+        var properties = PropertiesService.getScriptProperties();
+        var key = LongRun.PREFIX_RUNNING + funcName;
+        if (running) {
+            properties.setProperty(key, "running");
+        }
+        else {
+            properties.deleteProperty(key);
+        }
+    };
+    /**
+     * Sets max execution seconds
+     * @param seconds
+     */
+    LongRun.prototype.setMaxExecutionSeconds = function (seconds) {
+        LongRun.RUNNING_MAX_SECONDS = seconds;
+    };
+    /**
+     * Sets the trigger's delay minutes
+     * @param minutes
+     */
+    LongRun.prototype.setTriggerDelayMinutes = function (minutes) {
+        LongRun.RUNNING_DELAY_MINUTES = minutes;
+    };
+    /**
+     * Returns the function parameters
+     * @param funcName
+     */
+    LongRun.prototype.getParameters = function (funcName) {
+        var properties = PropertiesService.getScriptProperties();
+        var parameters = properties.getProperty(LongRun.PREFIX_OPTION + funcName);
+        if (parameters != null) {
+            return parameters.split(',');
+        }
+        else {
+            return [];
+        }
+    };
+    /**
+     * Sets the function parameters.
+     * @param funcName
+     * @param parameters
+     */
+    LongRun.prototype.setParameters = function (funcName, parameters) {
+        var properties = PropertiesService.getScriptProperties();
+        if (parameters != null) {
+            properties.setProperty(LongRun.PREFIX_OPTION + funcName, parameters.join(','));
+        }
+        else {
+            properties.deleteProperty(LongRun.PREFIX_OPTION + funcName);
+        }
+    };
+    /**
+     * Starts or Resume Long-Run process.
+     * @returns start index ( 0 for the first time )
+     */
+    LongRun.prototype.startOrResume = function (funcName) {
+        // save start time
+        this.startTimeMap[funcName] = new Date().getTime();
+        // get properties of spreadsheet
+        var properties = PropertiesService.getScriptProperties();
+        // set running-flag
+        this.setRunning(funcName, true);
+        // if the trigger exists, delete it.
+        this.deleteTrigger(LongRun.PREFIX_TRIGGER_KEY + funcName);
+        // get start index
+        var startPos = parseInt(properties.getProperty(LongRun.PREFIX_START_POS + funcName));
+        if (!startPos) {
+            return 0;
+        }
+        else {
+            return startPos;
+        }
+    };
+    /**
+     * Determines whether the process should be suspended.
+     * If it should be suspended, the next trigger will be registered.
+     * @param funcName
+     * @param nextIndex - start position when resuming
+     * @return true - it should be suspended
+     */
+    LongRun.prototype.checkShouldSuspend = function (funcName, nextIndex) {
+        var startTime = this.startTimeMap[funcName];
+        var diff = (new Date().getTime() - startTime) / 1000;
+        // If it's past the specified time, suspend the process
+        if (diff >= LongRun.RUNNING_MAX_SECONDS) {
+            // register the next trigger and set running-flag off
+            this.registerNextTrigger(funcName, nextIndex);
+            return true;
+        }
+        else {
+            return false;
+        }
+    };
+    /**
+     * Resets Long-Running variables
+     * @param funcName
+     */
+    LongRun.prototype.reset = function (funcName) {
+        // delete trigger
+        this.deleteTrigger(LongRun.PREFIX_TRIGGER_KEY + funcName);
+        // delete spreadsheet properties
+        var properties = PropertiesService.getScriptProperties();
+        properties.deleteProperty(LongRun.PREFIX_START_POS + funcName);
+        properties.deleteProperty(LongRun.PREFIX_OPTION + funcName);
+        properties.deleteProperty(LongRun.PREFIX_RUNNING + funcName);
+        properties.deleteProperty(LongRun.PREFIX_TRIGGER_KEY + funcName);
+    };
+    /**
+     * Resets Long-Running variables if there is no next trigger.
+     * Returns whether the command has finished or not.
+     * @param funcName
+     */
+    LongRun.prototype.end = function (funcName) {
+        var ret = false;
+        if (!this.existsNextTrigger(funcName)) {
+            this.reset(funcName);
+            ret = true;
+        }
+        return ret;
+    };
+    /**
+     * Returns if there is next trigger.
+     * @param funcName
+     */
+    LongRun.prototype.existsNextTrigger = function (funcName) {
+        var triggerId = PropertiesService.getScriptProperties().getProperty(LongRun.PREFIX_TRIGGER_KEY + funcName);
+        return triggerId != null;
+    };
+    /**
+     * register the next trigger and set running-flag off
+     * @param funcName
+     * @param nextIndex - start position when resuming
+     */
+    LongRun.prototype.registerNextTrigger = function (funcName, nextIndex) {
+        // get spreadsheet properties
+        var properties = PropertiesService.getScriptProperties();
+        properties.setProperty(LongRun.PREFIX_START_POS + funcName, String(nextIndex)); // save next start position
+        this.setTrigger(LongRun.PREFIX_TRIGGER_KEY + funcName, funcName); // set trigger
+        // turn off running-flag
+        properties.deleteProperty(LongRun.PREFIX_RUNNING + funcName);
+    };
+    /**
+     * Deletes the trigger
+     * @param triggerKey
+     */
+    LongRun.prototype.deleteTrigger = function (triggerKey) {
+        var triggerId = PropertiesService.getScriptProperties().getProperty(triggerKey);
+        if (!triggerId)
+            return;
+        ScriptApp.getProjectTriggers().filter(function (trigger) {
+            return trigger.getUniqueId() == triggerId;
+        })
+            .forEach(function (trigger) {
+            ScriptApp.deleteTrigger(trigger);
+        });
+        PropertiesService.getScriptProperties().deleteProperty(triggerKey);
+    };
+    /**
+     * Sets a trigger
+     * @param triggerKey
+     * @param funcName
+     */
+    LongRun.prototype.setTrigger = function (triggerKey, funcName) {
+        this.deleteTrigger(triggerKey); // delete if exists.
+        var dt = new Date();
+        dt.setMinutes(dt.getMinutes() + LongRun.RUNNING_DELAY_MINUTES); // will execute after the specified time
+        var triggerId = ScriptApp.newTrigger(funcName).timeBased().at(dt).create().getUniqueId();
+        // save the trigger id to delete the trigger later.
+        PropertiesService.getScriptProperties().setProperty(triggerKey, triggerId);
+    };
+    // constants
+    LongRun.PREFIX_RUNNING = "running_";
+    LongRun.PREFIX_TRIGGER_KEY = "trigger_";
+    LongRun.PREFIX_START_POS = "start_";
+    LongRun.PREFIX_OPTION = "option_";
+    LongRun.RUNNING_MAX_SECONDS = 4 * 60;
+    LongRun.RUNNING_DELAY_MINUTES = 1;
+    LongRun.EXECUTE_LONGRUN_FUNCNAME = "_executeLongRun";
+    return LongRun;
+}());
+exports.LongRun = LongRun;
+/**
+ * A function allows you to easily execute long-run task using the LongRun class.
+ *
+ * @param mainFuncName - Name of the function to be executed each time.
+ * @param loopCount - Number of times to execute the main function.
+ * @param params - Parameters passed to each function (string[]). (optional)
+ * @param initializerName - Name of the first function to be executed on first or restart. (optional)
+ * @param finalizerName - Name of the function to be called on interruption or when all processing is complete. (optional)
+ *
+ * The definition of each function to be passed should be as follows.
+ *  Main function:  function [function name](index: number, params: string[]) {...}
+ *  Initializer:    function [function name](startIndex: number, params: string[]) {...}
+ *  Finalizer:      function [function name](isFinished: boolean, params: string[]) {...}
+ */
+function executeLongRun(mainFuncName, loopCount, params, initializerName, finalizerName) {
+    if (params === void 0) { params = null; }
+    if (initializerName === void 0) { initializerName = null; }
+    if (finalizerName === void 0) { finalizerName = null; }
+    var longRunParams = [];
+    longRunParams.push(mainFuncName);
+    longRunParams.push(String(loopCount));
+    longRunParams.push(initializerName === null ? '' : initializerName);
+    longRunParams.push(finalizerName === null ? '' : finalizerName);
+    if (params != null && params.length > 0) {
+        longRunParams.push(params.join(','));
+    }
+    LongRun.instance.setParameters(LongRun.EXECUTE_LONGRUN_FUNCNAME, longRunParams);
+    _executeLongRun();
+}
+exports.executeLongRun = executeLongRun;
+/**
+ * The main body of executeLongRun
+ */
+function _executeLongRun() {
+    var longRun = LongRun.instance;
+    // get parameters
+    var longRunParams = longRun.getParameters(LongRun.EXECUTE_LONGRUN_FUNCNAME);
+    var mainFuncName = longRunParams[0];
+    var loopCount = parseInt(longRunParams[1]);
+    var initializerName = longRunParams[2];
+    var finalizerName = longRunParams[3];
+    var params = [];
+    for (var i = 4; i < longRunParams.length; i++) {
+        params.push('"' + longRunParams[i] + '"');
+    }
+    var paramsLiteral = '[' + params.join(',') + ']';
+    var startIndex = longRun.startOrResume(LongRun.EXECUTE_LONGRUN_FUNCNAME);
+    try {
+        // *** call initializer ***
+        if (initializerName != null && initializerName.length > 0) {
+            eval(initializerName + '(' + startIndex + ',' + paramsLiteral + ')');
+        }
+        // execute the iterative process.
+        for (var i = startIndex; i < loopCount; i++) {
+            // Each time before executing a process, you need to check if it should be stopped or not.
+            if (longRun.checkShouldSuspend(LongRun.EXECUTE_LONGRUN_FUNCNAME, i)) {
+                // if checkShouldSuspend() returns true, the next trigger has been set
+                // and you should get out of the loop.
+                console.log('*** The process has been suspended. ***');
+                break;
+            }
+            // *** call main process ***
+            eval(mainFuncName + '(' + i + ',' + paramsLiteral + ')');
+        }
+    }
+    catch (e) {
+        console.log(e.message);
+    }
+    finally {
+        // you must always call end() to reset the long-running variables if there is no next trigger.
+        var finished = longRun.end(LongRun.EXECUTE_LONGRUN_FUNCNAME);
+        // *** call finalizer ***
+        if (finalizerName != null && finalizerName.length > 0) {
+            eval(finalizerName + '(' + finished + ',' + paramsLiteral + ')');
+        }
+    }
+}
+
+
+
+//// shortcut form
+function sortAndFindDuplicates() {
+    Scode.sortAndFindDuplicates()
+}
+
+function longConvertToCellImage() {
+    Scode.longConvertToCellImage()
+}
+
+function addFormatting() {
+    Scode.addFormatting()
+}
+
+function resetFilters() {
+    Scode.resetFilters()
+}
