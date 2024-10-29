@@ -2,9 +2,11 @@ import os
 import shutil
 import numpy as np
 import csv
+import warnings
 
 import pygsheets
 from pydrive.auth import GoogleAuth
+from pydrive.auth import RefreshError
 from pydrive.drive import GoogleDrive
 
 import skimage as sk
@@ -463,6 +465,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
     if not print_to_file:
         # setup for google drive
         print('Authenticating with Google Drive...', end=' ')
+        # ignore warning if creds.txt is not there
+        warnings.filterwarnings('ignore')
         gauth = GoogleAuth(settings_file='settings.yaml')
         gauth.LoadCredentialsFile("creds.txt")
         if gauth.credentials is None:
@@ -470,7 +474,10 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             gauth.LocalWebserverAuth()
         elif gauth.access_token_expired:
             # Refresh them if expired
-            gauth.Refresh()
+            try:
+                gauth.Refresh()
+            except RefreshError():
+                gauth.LocalWebserverAuth()
         else:
             # Initialize the saved creds
             gauth.Authorize()
