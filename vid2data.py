@@ -468,7 +468,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         # ignore warning if creds.txt is not there
         warnings.filterwarnings('ignore')
         gauth = GoogleAuth(settings_file='settings.yaml')
-        gauth.LoadCredentialsFile("creds.txt")
+        gauth.LoadCredentialsFile("creds.json")
         if gauth.credentials is None:
             # Authenticate if they're not there
             gauth.LocalWebserverAuth()
@@ -476,13 +476,13 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             # Refresh them if expired
             try:
                 gauth.Refresh()
-            except RefreshError():
+            except RefreshError as e:
                 gauth.LocalWebserverAuth()
         else:
             # Initialize the saved creds
             gauth.Authorize()
         # Save the current credentials to a file
-        gauth.SaveCredentialsFile("creds.txt")
+        gauth.SaveCredentialsFile("creds.json")
         drive = GoogleDrive(gauth)
         gc = pygsheets.authorize(service_file='scenario-code.json')
         # Open spreadsheet and then worksheet
