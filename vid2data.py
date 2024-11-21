@@ -3,6 +3,7 @@ import shutil
 import numpy as np
 import csv
 import warnings
+import time
 
 import pygsheets
 from pydrive.auth import GoogleAuth
@@ -855,7 +856,12 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             print('Trashing file: '+ toRemove[i][0])
             os.remove('out/' + toRemove[i][0])
             if not print_to_file:
-                file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
+                # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
+                while True:
+                    file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
+                    if len(file_list) == 1:
+                        break
+                    time.sleep(0.5)
                 file = file_list[0]
                 file.Trash()
         raise BlackCodeException()
