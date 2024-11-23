@@ -1,5 +1,5 @@
 function sortAndFindDuplicates() {
-    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    sheet = SpreadsheetApp.openById("1jiENXU_bhaPieBznc7FM2Eu8Ibb-Txhrde-SVAvNWN0").getSheetByName('Codes')
     range = sheet.getRange("A3:S")
     range.sort(13)
     vals = sheet.getRange("M3:M").getValues()
@@ -14,7 +14,7 @@ function sortAndFindDuplicates() {
 }
 
 function longConvertToCellImage() {
-    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    sheet = SpreadsheetApp.openById("1jiENXU_bhaPieBznc7FM2Eu8Ibb-Txhrde-SVAvNWN0").getSheetByName('Codes')
     avals = sheet.getRange("A3:A").getValues()
     alast = avals.filter(String).length
     formulae = sheet.getRange("L3:L" + (alast + 2)).getFormulas()
@@ -42,7 +42,7 @@ function longConvertToCellImage() {
 
 function convertMain_(index, toConvert) {
     // toConvert is a list of row values that have an image formula
-    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    sheet = SpreadsheetApp.openById("1jiENXU_bhaPieBznc7FM2Eu8Ibb-Txhrde-SVAvNWN0").getSheetByName('Codes')
     for (let i = 0; i < toConvert.length; i++) {
         if (i == index) {
             range = sheet.getRange(+toConvert[i] + 3, 12)
@@ -58,7 +58,7 @@ function convertMain_(index, toConvert) {
 }
 
 function addFormatting() {
-    sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Codes')
+    sheet = SpreadsheetApp.openById("1jiENXU_bhaPieBznc7FM2Eu8Ibb-Txhrde-SVAvNWN0").getSheetByName('Codes')
     rotVals = sheet.getRange("B3:B").getValues()
     last = rotVals.filter(String).length
     rotRange = sheet.getRange("O3:O")
@@ -104,7 +104,7 @@ function formatHelper_(weaps) {
 }
 
 function resetFilters() {
-    var searchSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Search');
+    var searchSheet = SpreadsheetApp.openById("1jiENXU_bhaPieBznc7FM2Eu8Ibb-Txhrde-SVAvNWN0").getSheetByName('Search');
     searchSheet.getRange("B3").setValue(''); // Map Reset
     searchSheet.getRange("E3").setValue(''); // Rotation Reset
 
