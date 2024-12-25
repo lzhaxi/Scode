@@ -35,8 +35,7 @@ function longConvertToCellImage() {
             }
         }
     } else {
-        LongRun.instance.setMaxExecutionSeconds(200);
-        executeLongRun("convertMain_", toConvert.length, toConvert, void(0), "longConvertToCellImage")
+        executeLongRun("convertMain_", toConvert.length, toConvert)
     }
 }
 
