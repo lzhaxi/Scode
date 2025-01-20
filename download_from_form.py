@@ -1,4 +1,5 @@
 from pydrive.auth import GoogleAuth
+from pydrive.auth import RefreshError
 from pydrive.drive import GoogleDrive
 import os
 
@@ -6,7 +7,7 @@ if __name__ == '__main__':
     # setup for google drive
     print('Authenticating with Google Drive...', end=' ')
     gauth = GoogleAuth(settings_file='settings.yaml')
-    gauth.LoadCredentialsFile("creds.txt")
+    gauth.LoadCredentialsFile("creds.json")
     if gauth.credentials is None:
         # Authenticate if they're not there
         gauth.LocalWebserverAuth()
@@ -17,7 +18,7 @@ if __name__ == '__main__':
         # Initialize the saved creds
         gauth.Authorize()
     # Save the current credentials to a file
-    gauth.SaveCredentialsFile("creds.txt")
+    gauth.SaveCredentialsFile("creds.json")
     drive = GoogleDrive(gauth)
     print('Done')
     folder_id = '1pDpVFc6g0ZN1RojRfZF10t4KizcCY-fnWYUpDIbG-bh3SmBvL6kWxYZOMbysh1omwU36j5va'

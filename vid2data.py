@@ -188,7 +188,7 @@ def get_date(frame, lang='en'):
             # sum of 100 is considered a black pixel
             if val < 100:
                 pixels += 1
-        if pixels > 15:
+        if pixels >= 15:
             stop += 1
         else:
             stop = 0
@@ -650,7 +650,11 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 file1 = drive.CreateFile({'title' : dateFile, 'parents': [{'id': FOLDERID}]})
                 file1.SetContentFile('out/' + dateFile)
                 file1['mimeType'] = 'image/png'
-                file1.Upload()
+                try:
+                    file1.Upload()
+                except:
+                    print('Error uploading image to Google Drive')
+                    raise Exception('Error uploading image to Google Drive')
                 print('Uploaded code image to Google Drive')
 
             table_row = [map, rots, haz, wave1, wave2, wave3, wave4]
@@ -719,12 +723,13 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 file_mode = 'a' if os.path.exists('out/log.txt') else 'w'
                 with open('out/log.txt', file_mode) as f:
                     f.write('date: ' + dateFile + ', frame: ' + str(currentFrame) + ', prevFrame: ' + str(prevFrame) + ', row: ' + str(row) + '\n')
-                cv2.imwrite('out/frame' + str(currentFrame) + filename[:-4] + '.png', frame)
+                frameNum = '_' + str(prevFrame) + '_' + str(currentFrame) + '_'
+                cv2.imwrite('out/frame' + frameNum + filename[:-4] + '.png', frame)
                 cam2 = cv2.VideoCapture('videos/' + filename)
                 for i in range(0, prevFrame):
                     cam2.read()
                 ret, prevF = cam2.read()
-                cv2.imwrite('out/prevFrame' + str(prevFrame) + filename[:-4] + '.png', prevF)
+                cv2.imwrite('out/pFrame' + frameNum + filename[:-4] + '.png', prevF)
                 cam2.release()
             ret, nextFrame = cam.read()
             currentFrame += 1
@@ -847,7 +852,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             for i in range(0, len(toRemove)):
                 os.remove('out/' + toRemove[i][0])
         cam.release()
-    except BlackCodeException as e:
+    except Exception as e:
         print(e)
         cam.release()
         if print_to_file:
@@ -864,7 +869,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                     time.sleep(0.5)
                 file = file_list[0]
                 file.Trash()
-        raise BlackCodeException()
+        raise e
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Converts scenario videos to data to be uploaded to the main google sheet or saved as a local csv.",epilog="If no arguments are provided, all the videos in /videos will be uploaded and assumed to be lang=en.")
@@ -892,3 +897,5 @@ if __name__ == '__main__':
                     print(vid + ' does not exist. Please check to make sure it has been placed in the /videos directory')
     except BlackCodeException as e:
         print('Stopped running due to black code exception')
+    except Exception as e:
+        print('Error: ' + str(e))

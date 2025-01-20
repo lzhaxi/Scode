@@ -115,6 +115,77 @@ function resetFilters() {
     searchSheet.getRange("B21:B22").setValue(''); // Hazard Reset
 }
 
+function pickRandomMatchingRow() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const randomSheet = ss.getSheetByName("Random");
+  const codesSheet = ss.getSheetByName("Codes");
+  
+  if (!randomSheet || !codesSheet) {
+    throw new Error("Required sheet(s) not found.");
+  }
+  
+  const dropdownValue = randomSheet.getRange("A1").getValue();
+
+  // Validate the range dynamically
+  const lastRow = codesSheet.getLastRow();
+  const lastCol = codesSheet.getLastColumn();
+  const startRow = 3; // Data starts from row 3
+
+  if (lastRow < startRow || lastCol < 12) {
+    randomSheet.getRange("A3").setValue("Insufficient data in Codes sheet.");
+    return;
+  }
+
+  const numRows = lastRow - startRow + 1; // Include all rows starting from 3
+  const dataRange = codesSheet.getRange(startRow, 1, numRows, lastCol);
+  const dataValues = dataRange.getValues();
+
+  // Filter rows based on column A (dropdown value)
+  const matchingRows = dataValues
+    .map((row, index) => ({ row, index: index + startRow })) // Correctly index rows starting from row 3
+    .filter(item => item.row[0] === dropdownValue && item.row[2] > 200);
+
+  if (matchingRows.length === 0) {
+    randomSheet.getRange("A3").setValue("No matching rows!");
+    return;
+  }
+
+  const randomIndex = Math.floor(Math.random() * matchingRows.length);
+  const randomRow = matchingRows[randomIndex].index; // Sheet row number for the random match
+
+  // Use INDEX formula for dynamic referencing
+  const indexFormula = `={"";INDEX(Codes!L${randomRow}:L${randomRow}, 1)}`;
+  randomSheet.getRange("A3").setFormula(indexFormula);
+}
+
+function onEdit(e) {
+  const sheet = e.source.getActiveSheet();
+  const range = e.range;
+
+  // Random checkbox
+  if (sheet.getName() === "Random" && range.getA1Notation() === "B2") {
+    const checkboxValue = range.getValue();
+
+    if (checkboxValue === true) {
+      Scode.pickRandomMatchingRow();
+      range.setValue(false); // Reset the checkbox to unchecked
+      console.log("Random scenario generated")
+    }
+  }
+
+  //Reset filters checkbox
+  if (sheet.getName() === "Search" && range.getA1Notation() === "E21") {
+    const checkboxValue = range.getValue();
+
+    if (checkboxValue === true) {
+      Scode.resetFilters();
+      range.setValue(false); // Reset the checkbox to unchecked
+      console.log("Filters were reset")
+    }
+  }
+}
+
+
 
 
 
