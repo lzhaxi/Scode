@@ -485,9 +485,9 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         # Save the current credentials to a file
         gauth.SaveCredentialsFile("creds.json")
         drive = GoogleDrive(gauth)
-        gc = pygsheets.authorize(service_file='scenario-code.json')
+        gc = pygsheets.authorize(service_file='scode.json')
         # Open spreadsheet and then worksheet
-        sh = gc.open('Leo\'s codes')
+        sh = gc.open('Updated Leo\'s codes')
         wks = sh.worksheet_by_title('Codes')
         print('Done')
     else:
