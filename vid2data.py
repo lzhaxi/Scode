@@ -897,5 +897,7 @@ if __name__ == '__main__':
                     print(vid + ' does not exist. Please check to make sure it has been placed in the /videos directory')
     except BlackCodeException as e:
         print('Stopped running due to black code exception')
+    except IndexError as e:
+        print('Likely a Job Not Complete, please check the video.')
     except Exception as e:
         print('Error: ' + str(e))
