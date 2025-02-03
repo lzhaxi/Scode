@@ -103,7 +103,7 @@ function formatHelper_(weaps) {
 }
 
 function resetFilters() {
-    var searchSheet = SpreadsheetApp.openById("1jiENXU_bhaPieBznc7FM2Eu8Ibb-Txhrde-SVAvNWN0").getSheetByName('Search');
+    var searchSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Search');
     searchSheet.getRange("B3").setValue(''); // Map Reset
     searchSheet.getRange("E3").setValue(''); // Rotation Reset
 
@@ -113,17 +113,19 @@ function resetFilters() {
     searchSheet.getRange("B18:H18").setValue(''); // Xtra Reset
 
     searchSheet.getRange("B21:B22").setValue(''); // Hazard Reset
+
+    searchSheet.getRange("G3").setValue(''); // Notes Reset
 }
 
 function pickRandomMatchingRow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const randomSheet = ss.getSheetByName("Random");
   const codesSheet = ss.getSheetByName("Codes");
-  
+
   if (!randomSheet || !codesSheet) {
     throw new Error("Required sheet(s) not found.");
   }
-  
+
   const dropdownValue = randomSheet.getRange("A1").getValue();
 
   // Validate the range dynamically
