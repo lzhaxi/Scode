@@ -73,10 +73,10 @@ WAVEBOTTOM = 539
 
 # wave type locations
 WAVEWIDTH = 158  # mudmouth eruptions longest wave
-WAVEHEIGHT = 50  # height of the wave itself
+WAVEHEIGHT = 43  # height of the wave itself
 WAVEHEIGHT2 = 62 # distance between successive waves
 WAVETYPELEFT = 299
-WAVETYPETOP = (405, 371, 339, 306) # indices for the location of the first wave given number of waves
+WAVETYPETOP = (408, 374, 342, 309) # indices for the location of the first wave given number of waves
 #king name locations
 KINGTOP = 501
 KINGBOTTOM = 526
@@ -371,8 +371,7 @@ def get_wave_type(wave, event_key, water_key, lang='en'):
     Returns:
         string containing tide level and event if applicable
     """
-    # pad to make it easier for pytesseract
-    wave = np.pad(wave, ((5, 5), (15, 5), (0, 0)), mode='constant', constant_values=0)
+    wave = cv2.cvtColor(wave, cv2.COLOR_BGR2GRAY)
     tess = detect_text(wave, config='--psm 6, -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "')
     #print('Raw detected: ', tess)
 
@@ -487,7 +486,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         drive = GoogleDrive(gauth)
         gc = pygsheets.authorize(service_file='scode.json')
         # Open spreadsheet and then worksheet
-        sh = gc.open('Updated Leo\'s codes')
+        sh = gc.open('Leo\'s codes v2')
         wks = sh.worksheet_by_title('Codes')
         print('Done')
     else:
