@@ -309,7 +309,7 @@ def get_hazard(info, lang='en'):
     Uses hazard_data to compare images using ssim
     """
     # method using pytesseract instead
-    #hazard = detect_text(info[HAZTOP:HAZBOTTOM, HAZLEFT:HAZRIGHT], '--psm 7, -c tessedit_char_whitelist=0123456789')
+    #hazard = detect_text(info[HAZTOP:HAZBOTTOM, HAZLEFT:HAZRIGHT], '--psm 7 -c tessedit_char_whitelist=0123456789')
 
     threshold = 0.7 # determined through testing
     haz = info[HAZTOP:HAZBOTTOM, HAZLEFT+HAZLANG[lang]:HAZRIGHT]
@@ -372,7 +372,7 @@ def get_wave_type(wave, event_key, water_key, lang='en'):
         string containing tide level and event if applicable
     """
     wave = cv2.cvtColor(wave, cv2.COLOR_BGR2GRAY)
-    tess = detect_text(wave, config='--psm 6, -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "')
+    tess = detect_text(wave, config='--psm 6 -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "')
     #print('Raw detected: ', tess)
 
     spaces = tess.split(' ')
@@ -413,7 +413,7 @@ def get_king(king, king_key, lang='en'):
     """
     # pad to make it easier for pytesseract
     king = np.pad(king, ((5, 5), (15, 5), (0, 0)), mode='constant', constant_values=0)
-    tess = detect_text(king, config='--psm 6, -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "')
+    tess = detect_text(king, config='--psm 6 -c tessedit_char_whitelist="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz "')
     #print('Raw detected: ', tess)
     return leven(tess, king_key)
 
@@ -486,7 +486,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         drive = GoogleDrive(gauth)
         gc = pygsheets.authorize(service_file='scode.json')
         # Open spreadsheet and then worksheet
-        sh = gc.open('Leo\'s codes v2')
+        sh = gc.open('Leo\'s codes v3.1')
         wks = sh.worksheet_by_title('Codes')
         print('Done')
     else:
@@ -661,7 +661,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             if print_to_file:
                 table_row += [dateFile]
             else:
-                table_row += ['=IMAGE("https://drive.google.com/uc?export=view&id=' + file1['id'] + '")']
+                table_row += ['https://drive.google.com/uc?export=view&id=' + file1['id']]
             table_row += [date, '', rots_filter, '-', '-', '-', '-'] # notes is empty, other columns are for search filtering, random weapons altered later
             result_arr.append(table_row)
             row += 1
