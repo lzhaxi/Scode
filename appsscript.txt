@@ -121,12 +121,14 @@ function pickRandomMatchingRow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const randomSheet = ss.getSheetByName("Random");
   const codesSheet = ss.getSheetByName("Codes");
+  const showCell = "A8";
 
   if (!randomSheet || !codesSheet) {
     throw new Error("Required sheet(s) not found.");
   }
 
-  const dropdownValue = randomSheet.getRange("A1").getValue();
+  const map = randomSheet.getRange("A1").getValue();
+  const rot = randomSheet.getRange("A4").getValue();
 
   // Validate the range dynamically
   const lastRow = codesSheet.getLastRow();
@@ -134,26 +136,32 @@ function pickRandomMatchingRow() {
   const startRow = 3; // Data starts from row 3
 
   if (lastRow < startRow || lastCol < 12) {
-    randomSheet.getRange("A5").setValue(`={"";"Insufficient data in Codes sheet."}`);
+    randomSheet.getRange(showCell).setValue(`={"";"Insufficient data in Codes sheet."}`);
     return;
   }
 
   const numRows = lastRow - startRow + 1; // Include all rows starting from 3
   const dataRange = codesSheet.getRange(startRow, 1, numRows, lastCol);
   const dataValues = dataRange.getValues();
-  const minHazard = randomSheet.getRange("B3").getValue();
-  const maxHazard = randomSheet.getRange("D3").getValue();
+  const minHazard = randomSheet.getRange("B6").getValue();
+  const maxHazard = randomSheet.getRange("D6").getValue();
   if (!(typeof minHazard === 'number' && minHazard >= 0 && minHazard <= 333) || !(typeof maxHazard === 'number' && maxHazard >= 0 && maxHazard <= 333)) {
-    randomSheet.getRange("A5").setValue(`={"";"Hazard must be 0-333"}`);
+    randomSheet.getRange(showCell).setValue(`={"";"Hazard must be 0-333"}`);
     return;
   }
-  // Filter rows based on column A (dropdown value)
-  const matchingRows = dataValues
-    .map((row, index) => ({ row, index: index + startRow })) // Correctly index rows starting from row 3
-    .filter(item => item.row[0] === dropdownValue && item.row[2] >= minHazard && item.row[2] <= maxHazard);
 
+  let matchingRows;
+  if (rot == "Normal") {
+    matchingRows = dataValues
+      .map((row, index) => ({ row, index: index + startRow })) // Correctly index rows starting from row 3
+      .filter(item => item.row[0] === map && !item.row[1].includes('Random') && item.row[2] >= minHazard && item.row[2] <= maxHazard);
+  } else {
+    matchingRows = dataValues
+      .map((row, index) => ({ row, index: index + startRow })) // Correctly index rows starting from row 3
+      .filter(item => item.row[0] === map && item.row[1].includes(rot) && item.row[2] >= minHazard && item.row[2] <= maxHazard);
+  }
   if (matchingRows.length === 0) {
-    randomSheet.getRange("A5").setValue(`={"";"No matching rows!"}`);
+    randomSheet.getRange(showCell).setValue(`={"";"No matching rows!"}`);
     return;
   }
 
@@ -162,7 +170,7 @@ function pickRandomMatchingRow() {
 
   // Use INDEX formula for dynamic referencing
   const indexFormula = `={"";INDEX(Codes!L${randomRow}:L${randomRow}, 1)}`;
-  randomSheet.getRange("A5").setFormula(indexFormula);
+  randomSheet.getRange(showCell).setFormula(indexFormula);
 }
 
 function onEdit(e) {
