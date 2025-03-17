@@ -661,7 +661,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             if print_to_file:
                 table_row += [dateFile]
             else:
-                table_row += ['https://drive.google.com/uc?export=view&id=' + file1['id']]
+                table_row += ['=IMAGE("https://drive.google.com/uc?export=view&id=' + file1['id'] + '")']
             table_row += [date, '', rots_filter, '-', '-', '-', '-'] # notes is empty, other columns are for search filtering, random weapons altered later
             result_arr.append(table_row)
             row += 1
