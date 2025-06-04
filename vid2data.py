@@ -4,6 +4,7 @@ import numpy as np
 import csv
 import warnings
 import time
+import socket
 
 import pygsheets
 from pydrive.auth import GoogleAuth
@@ -461,6 +462,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
     single: usage with pics2data, whether the video is of a single scenario
     from_pics: comes from pics2data, the green value is slightly lower for some reason when using pics
     """
+    socket.setdefaulttimeout(30) # set timeout for socket operations to 10 seconds, to prevent google drive upload file errors
     print('Current file is: ' + filename)
     if not print_to_file:
         # setup for google drive
@@ -645,16 +647,21 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             cv2.imwrite('out/' + dateFile, code)
             toRemove.append([dateFile, currentFrame, rand, waves, row])
             if not print_to_file:
-                # save image of code to google drive
-                file1 = drive.CreateFile({'title' : dateFile, 'parents': [{'id': FOLDERID}]})
-                file1.SetContentFile('out/' + dateFile)
-                file1['mimeType'] = 'image/png'
-                try:
-                    file1.Upload()
-                except:
-                    print('Error uploading image to Google Drive')
-                    raise Exception('Error uploading image to Google Drive')
-                print('Uploaded code image to Google Drive')
+                for attempt in range(20):
+                    # save image of code to google drive
+                    file1 = drive.CreateFile({'title' : dateFile, 'parents': [{'id': FOLDERID}]})
+                    file1.SetContentFile('out/' + dateFile)
+                    file1['mimeType'] = 'image/png'
+                    try:
+                        file1.Upload()
+                        print('Uploaded code image to Google Drive')
+                        break
+                    except:
+                        if attempt < 4:
+                            print('Google Drive upload failed, retrying...')
+                        else:
+                            raise Exception('Error uploading image to Google Drive')
+                    
 
             table_row = [map, rots, haz, wave1, wave2, wave3, wave4]
             table_row += ['-', '-', '-', '-'] # if random weapons, will be altered later
