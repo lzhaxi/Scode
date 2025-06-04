@@ -127,21 +127,20 @@ function pickRandomMatchingRow() {
     throw new Error("Required sheet(s) not found.");
   }
 
-  const map = randomSheet.getRange("A1").getValue();
+  const map = randomSheet.getRange("B1").getValue();
   const rot = randomSheet.getRange("A4").getValue();
 
   // Validate the range dynamically
   const lastRow = codesSheet.getLastRow();
-  const lastCol = codesSheet.getLastColumn();
   const startRow = 3; // Data starts from row 3
 
-  if (lastRow < startRow || lastCol < 12) {
+  if (lastRow < startRow) {
     randomSheet.getRange(showCell).setValue(`={"";"Insufficient data in Codes sheet."}`);
     return;
   }
 
   const numRows = lastRow - startRow + 1; // Include all rows starting from 3
-  const dataRange = codesSheet.getRange(startRow, 1, numRows, lastCol);
+  const dataRange = codesSheet.getRange(startRow, 1, numRows, 3);
   const dataValues = dataRange.getValues();
   const minHazard = randomSheet.getRange("B6").getValue();
   const maxHazard = randomSheet.getRange("D6").getValue();
