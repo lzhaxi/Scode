@@ -177,11 +177,11 @@ function onEdit(e) {
   const range = e.range;
 
   // Random checkbox
-  if (sheet.getName() === "Random" && range.getA1Notation() === "D4") {
+  if (sheet.getName() === "Random" && range.getA1Notation() === "D7") {
     const checkboxValue = range.getValue();
 
     if (checkboxValue === true) {
-      Scode.pickRandomMatchingRow();
+      pickRandomMatchingRow();
       range.setValue(false); // Reset the checkbox to unchecked
       console.log("Random scenario generated")
     }
@@ -192,7 +192,7 @@ function onEdit(e) {
     const checkboxValue = range.getValue();
 
     if (checkboxValue === true) {
-      Scode.resetFilters();
+      resetFilters();
       range.setValue(false); // Reset the checkbox to unchecked
       console.log("Filters were reset")
     }
