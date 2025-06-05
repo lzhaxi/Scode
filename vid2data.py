@@ -216,11 +216,29 @@ def get_date(frame, lang='en'):
         if i == len(indices) - 2:
             stats[ind][2] += 1 # the last digit is cut off
         letters.append(isolate_letter(date, stats[ind], [18, 12]))
+    date, slash_ind, slashes = get_date_helper(letters, lang=lang)
+    if slashes < 2:
+        date, slash_ind, slashes = get_date_helper(letters, slash=True, lang=lang)
+    if lang == 'en':
+        result = np.sum(letters[-1][:, 6:])
+        if result < 24300: # value obtained from looking at the average sum of the right half of A and P, as P should have a lower sum. P generally 20k-23k, A was 25.5k-26.5k
+            date += 'PM'
+        else:
+            date += 'AM'
+    # the space is after the 4 digits of the year after the second slash
+    date = date[:slash_ind+5] + ' ' + date[slash_ind+5:]
+    if lang == 'eu':
+        day, month, year = date.split('/')
+        # Return the formatted string in mm/dd/yyyy
+        return f"{month}/{day}/{year}"
+    return date
 
+def get_date_helper(letters, slash=False, lang='en'):
     # go through each letter and compare each letter to the ground truth data and choose the one that is most similar
     date = ''
     letter_list = ['0', '02', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'slash']
     slash_ind = 0 # will be used to find where the space should be inserted into the date
+    slashes = 0 # number of slashes found, this is a second step to ensure the slash is not misidentified as a 1 or 7
     if lang == 'en':
         # don't need the M at the end
         length = len(letters) - 1
@@ -254,11 +272,16 @@ def get_date(frame, lang='en'):
             one2 = ssim(letters[i], cv2.imread('ground_truths/letter_data/13.png'))
             let_list = [result, '1', '1', '7', '7']
             result_list = [np.max(results), one, one2, seven1, seven2]
+            if slash:
+                let_list.append('slash')
+                slash1 = ssim(letters[i], cv2.imread('ground_truths/letter_data/slash1.png'))
+                result_list.append(slash1)
             result = let_list[np.argmax(result_list)]
         # the filename can't contain a slash, so this is the workaround
         if result == 'slash':
             result = '/'
             slash_ind = i
+            slashes += 1
         if len(result) > 1:
             result = result[0]
         date += result
@@ -268,19 +291,8 @@ def get_date(frame, lang='en'):
         elif lang == 'eu':
             if i == len(letters) - 3:
                 date += ':'
-    if lang == 'en':
-        result = np.sum(letters[-1][:, 6:])
-        if result < 24300: # value obtained from looking at the average sum of the right half of A and P, as P should have a lower sum. P generally 20k-23k, A was 25.5k-26.5k
-            date += 'PM'
-        else:
-            date += 'AM'
-    # the space is after the 4 digits of the year after the second slash
-    date = date[:slash_ind+5] + ' ' + date[slash_ind+5:]
-    if lang == 'eu':
-        day, month, year = date.split('/')
-        # Return the formatted string in mm/dd/yyyy
-        return f"{month}/{day}/{year}"
-    return date
+    return date, slash_ind, slashes
+
 
 def euclidean_distance(pt1, pt2):
     return np.sqrt((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2)
