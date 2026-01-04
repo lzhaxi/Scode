@@ -20,6 +20,41 @@ from Levenshtein import distance as levenshtein
 # constants
 
 FOLDERID='1rz8aL7KwH6Ifiw1LmYRvrjMbvtFj_C98'
+
+# Supported video resolutions: maps input shape to target resize dimensions (or None if no resize needed)
+SUPPORTED_RESOLUTIONS = {
+    (720, 1280, 3): None,      # 720p - no resize needed (Switch 1)
+    (1080, 1920, 3): (720, 1280),  # 1080p - resize to 720p (Switch 2)
+}
+
+def resize_frame(frame):
+    """
+    Resize frame to 720p if it's a supported higher resolution.
+    Returns the frame unchanged if already 720p.
+    """
+    shape = frame.shape
+    if shape not in SUPPORTED_RESOLUTIONS:
+        return None  # Unsupported resolution
+    target = SUPPORTED_RESOLUTIONS[shape]
+    if target is None:
+        return frame  # Already 720p
+    # Resize using INTER_AREA for best quality when downscaling
+    return cv2.resize(frame, (target[1], target[0]), interpolation=cv2.INTER_AREA)
+
+# Image cache to avoid repeated disk reads
+_IMAGE_CACHE = {}
+
+def get_cached_image(path):
+    """Load an image from disk, caching it for subsequent accesses."""
+    if path not in _IMAGE_CACHE:
+        _IMAGE_CACHE[path] = cv2.imread(path)
+    return _IMAGE_CACHE[path]
+
+# Pre-compute file listings to avoid repeated os.listdir calls
+ROTATION_IMAGES = [f for f in os.listdir('ground_truths/rotation-images') if f.endswith('.png')]
+WEAPON_IMAGES = [f for f in os.listdir('ground_truths/weapon-images') if f.endswith('.png')]
+ROLLER_IMAGES = [f for f in os.listdir('ground_truths/weapon-images/Rollers') if f.endswith('.png')]
+SWORD_IMAGES = [f for f in os.listdir('ground_truths/weapon-images/Swords') if f.endswith('.png')]
 LANG=['en', 'eu', 'jp']
 # eu option is DD/MM/YYYY with the date, in English, with no other differences
 
@@ -180,21 +215,22 @@ def get_date(frame, lang='en'):
     # remove the background so it doesn't interfere
     # counts the columns that have majority black pixels, and the image can be cut off at the end where there are many columns with black pixels in a row
     h, w, _ = date.shape
+    
+    # Vectorized pixel counting: sum across color channels, then count black pixels per column
+    col_sums = np.sum(date, axis=2)  # shape: (h, w) - sum of RGB values per pixel
+    black_counts = np.sum(col_sums < 100, axis=0)  # count of black pixels per column
+    
+    # Find first occurrence of 7+ consecutive columns with >= 15 black pixels
     stop_idx = w
     stop = 0
     for x in range(w):
-        pixels = 0
-        for y in range(h):
-            val = np.sum(date[y, x])
-            # sum of 100 is considered a black pixel
-            if val < 100:
-                pixels += 1
-        if pixels >= 15:
+        if black_counts[x] >= 15:
             stop += 1
         else:
             stop = 0
         if stop > 7:
             stop_idx = x
+            break
     date = date[:, :stop_idx]
     # assume last two letters are PM or AM, separate the two parts and use detect_text with different config
     gray = cv2.cvtColor(date, cv2.COLOR_BGR2GRAY)
@@ -247,34 +283,34 @@ def get_date_helper(letters, slash=False, lang='en'):
     for i in range(length):
         results = []
         for letter in letter_list:
-            letter_base = cv2.imread('ground_truths/letter_data/' + letter + '.png')
+            letter_base = get_cached_image('ground_truths/letter_data/' + letter + '.png')
             result = ssim(letters[i], letter_base)
             results.append(result)
         result = letter_list[np.argmax(results)]
         # code has a hard time recognizing certain digits, so I have multiple examples
         if result == '9' or result == '4':
-            four = ssim(letters[i], cv2.imread('ground_truths/letter_data/42.png'))
-            nine = ssim(letters[i], cv2.imread('ground_truths/letter_data/92.png'))
-            nine2 = ssim(letters[i], cv2.imread('ground_truths/letter_data/93.png'))
+            four = ssim(letters[i], get_cached_image('ground_truths/letter_data/42.png'))
+            nine = ssim(letters[i], get_cached_image('ground_truths/letter_data/92.png'))
+            nine2 = ssim(letters[i], get_cached_image('ground_truths/letter_data/93.png'))
             let_list = [result, '4', '9', '9']
             result_list = [np.max(results), four, nine, nine2]
             result = let_list[np.argmax(result_list)]
         if result == '5' or result == '6':
-            five = ssim(letters[i], cv2.imread('ground_truths/letter_data/52.png'))
-            six = ssim(letters[i], cv2.imread('ground_truths/letter_data/62.png'))
+            five = ssim(letters[i], get_cached_image('ground_truths/letter_data/52.png'))
+            six = ssim(letters[i], get_cached_image('ground_truths/letter_data/62.png'))
             let_list = [result, '5', '6']
             result_list = [np.max(results), five, six]
             result = let_list[np.argmax(result_list)]
         if result == '1' or result == '7':
-            seven1 = ssim(letters[i], cv2.imread('ground_truths/letter_data/72.png'))
-            seven2 = ssim(letters[i], cv2.imread('ground_truths/letter_data/73.png'))
-            one = ssim(letters[i], cv2.imread('ground_truths/letter_data/12.png'))
-            one2 = ssim(letters[i], cv2.imread('ground_truths/letter_data/13.png'))
+            seven1 = ssim(letters[i], get_cached_image('ground_truths/letter_data/72.png'))
+            seven2 = ssim(letters[i], get_cached_image('ground_truths/letter_data/73.png'))
+            one = ssim(letters[i], get_cached_image('ground_truths/letter_data/12.png'))
+            one2 = ssim(letters[i], get_cached_image('ground_truths/letter_data/13.png'))
             let_list = [result, '1', '1', '7', '7']
             result_list = [np.max(results), one, one2, seven1, seven2]
             if slash:
                 let_list.append('slash')
-                slash1 = ssim(letters[i], cv2.imread('ground_truths/letter_data/slash1.png'))
+                slash1 = ssim(letters[i], get_cached_image('ground_truths/letter_data/slash1.png'))
                 result_list.append(slash1)
             result = let_list[np.argmax(result_list)]
         # the filename can't contain a slash, so this is the workaround
@@ -359,7 +395,7 @@ def get_hazard(info, lang='en'):
     for digit_img in digits:
         results = []
         for digit in digit_list:
-            digit_base = cv2.imread('ground_truths/hazard_data/' + digit + '.png')
+            digit_base = get_cached_image('ground_truths/hazard_data/' + digit + '.png')
             results.append(ssim(digit_img, digit_base))
         hazard += digit_list[np.argmax(results)]
     # sometimes stats gets another element in its array, delete it and log it
@@ -523,9 +559,15 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
     if not ret:
         print('Error: No frame read from video')
         return
-    if nextFrame.shape != (720, 1280, 3):
-        print('Error: Video is not 720p')
+    
+    # Check if resolution is supported and resize if needed
+    if nextFrame.shape not in SUPPORTED_RESOLUTIONS:
+        print(f'Error: Video resolution {nextFrame.shape[1]}x{nextFrame.shape[0]} is not supported. Supported: 720p, 1080p')
         return
+    needs_resize = SUPPORTED_RESOLUTIONS[nextFrame.shape] is not None
+    if needs_resize:
+        print(f'Detected {nextFrame.shape[1]}x{nextFrame.shape[0]} video, will resize frames to 720p')
+        nextFrame = resize_frame(nextFrame)
 
     nextDate = get_date(nextFrame, lang)
     equal = 0 # how many frames in a row have been equivalent
@@ -550,6 +592,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             frame = nextFrame
             date = nextDate
             ret, nextFrame = cam.read()
+            if ret and needs_resize:
+                nextFrame = resize_frame(nextFrame)
             currentFrame += 1
             if ret:
                 nextDate = get_date(nextFrame, lang)
@@ -599,14 +643,13 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             max = [[0, ''], [0, ''], [0, ''], [0, '']]
             # compare to weapon images
             rand = False
-            for rotfilename in os.listdir('ground_truths/rotation-images'):
-                if rotfilename.endswith('.png'):
-                    weap = cv2.imread('ground_truths/rotation-images/' + rotfilename)
-                    similarity = (ssim(rot1, weap), ssim(rot2, weap), ssim(rot3, weap), ssim(rot4, weap))
-                    for i in range(0, 4):
-                        if similarity[i] > max[i][0]:
-                            max[i][0] = similarity[i]
-                            max[i][1] = rotfilename[:-4]
+            for rotfilename in ROTATION_IMAGES:
+                weap = get_cached_image('ground_truths/rotation-images/' + rotfilename)
+                similarity = (ssim(rot1, weap), ssim(rot2, weap), ssim(rot3, weap), ssim(rot4, weap))
+                for i in range(0, 4):
+                    if similarity[i] > max[i][0]:
+                        max[i][0] = similarity[i]
+                        max[i][1] = rotfilename[:-4]
             print('Done')
             if max[0][1] == 'Random' or max[0][1] == 'Gold Random':
                 # hard to tell apart random and gold question mark, so use color values
@@ -716,6 +759,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         for i in range(0, toRemove[-1][1]+1): # set frame to first frame of last scenario before weapons phase
             cam.read()
         ret, nextFrame = cam.read()
+        if ret and needs_resize:
+            nextFrame = resize_frame(nextFrame)
         nextDate = get_date(nextFrame, lang)
         currentFrame = toRemove[-1][1]
         flagInit = False
@@ -730,6 +775,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             date = nextDate
             while '-' in date:
                 ret, nextFrame = cam.read()
+                if ret and needs_resize:
+                    nextFrame = resize_frame(nextFrame)
                 nextDate = get_date(nextFrame, lang)
                 date = nextDate
                 currentFrame += 1
@@ -747,9 +794,13 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 for i in range(0, prevFrame):
                     cam2.read()
                 ret, prevF = cam2.read()
+                if ret and needs_resize:
+                    prevF = resize_frame(prevF)
                 cv2.imwrite('out/pFrame' + frameNum + filename[:-4] + '.png', prevF)
                 cam2.release()
             ret, nextFrame = cam.read()
+            if ret and needs_resize:
+                nextFrame = resize_frame(nextFrame)
             currentFrame += 1
             if ret:
                 nextDate = get_date(nextFrame, lang)
@@ -761,6 +812,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                     flagEqual = True
                     break
                 ret, nextFrame = cam.read()
+                if ret and needs_resize:
+                    nextFrame = resize_frame(nextFrame)
                 if not ret:
                     break
                 nextDate = get_date(nextFrame, lang)
@@ -788,19 +841,18 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 right = right - WWIDTH
                 top = WTOP
                 max = [[0, ''], [0, ''], [0, ''], [0, '']]
-                for filen in os.listdir('ground_truths/weapon-images'):
-                    if filen.endswith('.png'):
-                        weap = cv2.imread('ground_truths/weapon-images/' + filen)
-                        # print shape of both
-                        similarity = (ssim(weap1, weap), ssim(weap2, weap), ssim(weap3, weap), ssim(weap4, weap))
-                        for j in range(0, 4):
-                            if similarity[j] > max[j][0]:
-                                max[j][0] = similarity[j]
-                                if '_' in filen:
-                                    # file format is _# attached to the end of the name of the weapon, so remove that
-                                    max[j][1] = filen[:-6]
-                                else:
-                                    max[j][1] = filen[:-4]
+                for filen in WEAPON_IMAGES:
+                    weap = get_cached_image('ground_truths/weapon-images/' + filen)
+                    # print shape of both
+                    similarity = (ssim(weap1, weap), ssim(weap2, weap), ssim(weap3, weap), ssim(weap4, weap))
+                    for j in range(0, 4):
+                        if similarity[j] > max[j][0]:
+                            max[j][0] = similarity[j]
+                            if '_' in filen:
+                                # file format is _# attached to the end of the name of the weapon, so remove that
+                                max[j][1] = filen[:-6]
+                            else:
+                                max[j][1] = filen[:-4]
                 # Rollers are hard to predict, so without having every weapon always check for multiple images of rollers, only check if predicted weapon is one of the rollers
                 for j in range(4):
                     rollers = ['Roller', 'Carbon', 'Dynamo', 'Flingza', 'Swig']
@@ -814,13 +866,12 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                                 weapx = weap3
                             case 3:
                                 weapx = weap4
-                        for filen in os.listdir('ground_truths/weapon-images/Rollers'):
-                            if filen.endswith('.png'):
-                                weap = cv2.imread('ground_truths/weapon-images/Rollers/' + filen)
-                                similarity = ssim(weapx, weap)
-                                if similarity > max[j][0]:
-                                    max[j][0] = similarity
-                                    max[j][1] = filen[:-6]
+                        for filen in ROLLER_IMAGES:
+                            weap = get_cached_image('ground_truths/weapon-images/Rollers/' + filen)
+                            similarity = ssim(weapx, weap)
+                            if similarity > max[j][0]:
+                                max[j][0] = similarity
+                                max[j][1] = filen[:-6]
                 # For some reason, stamper is also hard to predict with GSword. Will check for that only if stamper is the pick
                 for j in range(4):
                     swords = ['Stamper']
@@ -834,13 +885,12 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                                 weapx = weap3
                             case 3:
                                 weapx = weap4
-                        for filen in os.listdir('ground_truths/weapon-images/Swords'):
-                            if filen.endswith('.png'):
-                                weap = cv2.imread('ground_truths/weapon-images/Swords/' + filen)
-                                similarity = ssim(weapx, weap)
-                                if similarity > max[j][0]:
-                                    max[j][0] = similarity
-                                    max[j][1] = filen[:-6]
+                        for filen in SWORD_IMAGES:
+                            weap = get_cached_image('ground_truths/weapon-images/Swords/' + filen)
+                            similarity = ssim(weapx, weap)
+                            if similarity > max[j][0]:
+                                max[j][0] = similarity
+                                max[j][1] = filen[:-6]
                 weaps.append(max[0][1] + ', ' + max[1][1] + ', ' + max[2][1] + ', ' + max[3][1])
                 weaps_filter.append('|' + max[0][1] + '||' + max[1][1] + '||' + max[2][1] + '||' + max[3][1] + '|')
             ind = row - initRow
