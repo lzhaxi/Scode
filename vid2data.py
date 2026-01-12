@@ -588,6 +588,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         row = len(cols) + 2
     initRow = row
     result_arr = []
+    black_code_recovery = {}  # Track scenarios needing code recovery: dateFile -> result_arr index
     try:
         while(ret and not flagEqual):
             frame = nextFrame
@@ -601,14 +602,28 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             # if reached end of the video, get data from current frame, then break
             if single:
                 flagEqual = True
-            elif ret and (date == nextDate or compare_image_diff(frame, nextFrame)):
-                if not flagInit:
-                    equal += 1
-                if equal < 10:
-                    # when it reaches 10 equivalent frames in a row, time for weapons phase
-                    continue
+            elif ret:
+                # Check if frames are the same - catch BlackCodeException to defer code capture
+                try:
+                    frames_same = date == nextDate or compare_image_diff(frame, nextFrame)
+                except BlackCodeException:
+                    # Black code detected - we'll try to recover it on second pass
+                    print(f'Black code detected on frame {currentFrame}, will attempt recovery on second pass')
+                    frames_same = False  # Treat as different frame to process this scenario
+                    # Mark that we need to capture this scenario's code on second pass
+                    # (We'll add to black_code_recovery after building dateFile)
+                    black_code_on_current_frame = True
                 else:
-                    flagEqual = True
+                    black_code_on_current_frame = False
+                
+                if frames_same:
+                    if not flagInit:
+                        equal += 1
+                    if equal < 10:
+                        # when it reaches 10 equivalent frames in a row, time for weapons phase
+                        continue
+                    else:
+                        flagEqual = True
             dateFile = date + '.png'
             # remove these characters for file name
             dateFile = dateFile.replace(':', ' ')
@@ -699,32 +714,41 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             # hazard level
             haz = get_hazard(info)
 
-            code = info[CODETOP:CODEBOTTOM, CODELEFT:CODERIGHT]
-            cv2.imwrite('out/' + dateFile, code)
-            toRemove.append([dateFile, currentFrame, rand, waves, row])
-            if not print_to_file:
-                for attempt in range(20):
-                    # save image of code to google drive
-                    file1 = drive.CreateFile({'title' : dateFile, 'parents': [{'id': FOLDERID}]})
-                    file1.SetContentFile('out/' + dateFile)
-                    file1['mimeType'] = 'image/png'
-                    try:
-                        file1.Upload()
-                        print('Uploaded code image to Google Drive')
-                        break
-                    except:
-                        if attempt < 4:
-                            print('Google Drive upload failed, retrying...')
-                        else:
-                            raise Exception('Error uploading image to Google Drive')
-                    
+            # Handle code image - skip for black code scenarios (will capture on second pass if random rotations exist)
+            if black_code_on_current_frame:
+                # Don't save code image yet - mark for recovery (only works if there are random rotations)
+                black_code_recovery[dateFile] = len(result_arr)  # Index in result_arr
+                toRemove.append([dateFile, currentFrame, rand, waves, row, True])  # True = needs code recovery
+                if print_to_file:
+                    code_cell = dateFile  # Placeholder, will be updated on recovery
+                else:
+                    code_cell = 'PENDING_RECOVERY'  # Will be updated on second pass
+            else:
+                code = info[CODETOP:CODEBOTTOM, CODELEFT:CODERIGHT]
+                cv2.imwrite('out/' + dateFile, code)
+                toRemove.append([dateFile, currentFrame, rand, waves, row, False])  # False = no recovery needed
+                if not print_to_file:
+                    for attempt in range(20):
+                        # save image of code to google drive
+                        file1 = drive.CreateFile({'title' : dateFile, 'parents': [{'id': FOLDERID}]})
+                        file1.SetContentFile('out/' + dateFile)
+                        file1['mimeType'] = 'image/png'
+                        try:
+                            file1.Upload()
+                            print('Uploaded code image to Google Drive')
+                            break
+                        except:
+                            if attempt < 4:
+                                print('Google Drive upload failed, retrying...')
+                            else:
+                                raise Exception('Error uploading image to Google Drive')
+                    code_cell = '=IMAGE("https://drive.google.com/uc?export=view&id=' + file1['id'] + '")'
+                else:
+                    code_cell = dateFile
 
             table_row = [map, rots, haz, wave1, wave2, wave3, wave4]
             table_row += ['-', '-', '-', '-'] # if random weapons, will be altered later
-            if print_to_file:
-                table_row += [dateFile]
-            else:
-                table_row += ['=IMAGE("https://drive.google.com/uc?export=view&id=' + file1['id'] + '")']
+            table_row += [code_cell]
             table_row += [date, '', rots_filter, '-', '-', '-', '-'] # notes is empty, other columns are for search filtering, random weapons altered later
             result_arr.append(table_row)
             row += 1
@@ -738,6 +762,10 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             print('Error: Images are all the same scenario code')
             return
 
+        # Check if there are black codes that need recovery but no random rotations to enable second pass
+        if black_code_recovery and not flagRand:
+            raise BlackCodeException('Black code detected with no random rotations - unable to recover via second pass')
+
         # unnecessary to run the rest of the code if there are no random weapons
         if not flagRand:
             if print_to_file:
@@ -745,7 +773,9 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                     writer = csv.writer(csv_file)
                     writer.writerows(result_arr)
                 for i in range(0, len(toRemove)):
-                    shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + '/' + toRemove[i][0])
+                    # Only move file if it exists (won't exist for black code scenarios)
+                    if os.path.isfile('out/' + toRemove[i][0]):
+                        shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + '/' + toRemove[i][0])
                 print('Wrote data to out/' + filename[:-4] + '/full_scenarios.csv')
             else:
                 wks.update_values(crange='A' + str(initRow) + ':S' + str(endRow), values=result_arr)
@@ -753,7 +783,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 shutil.move('videos/' + filename, new_path('videos/done/' + filename))
                 # only really consider it as done when it is uploaded to the sheet, not just saved locally
                 for i in range(0, len(toRemove)):
-                    os.remove('out/' + toRemove[i][0])
+                    if os.path.isfile('out/' + toRemove[i][0]):
+                        os.remove('out/' + toRemove[i][0])
             return
 
         cam = cv2.VideoCapture('videos/' + filename)
@@ -767,7 +798,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         flagInit = False
         flagEqual = False
         equal = 0
-        for dateOrigFile, prevFrame, rand, waves, row in reversed(toRemove):
+        for dateOrigFile, prevFrame, rand, waves, row, needs_recovery in reversed(toRemove):
             if flagEqual:
                 break
             dateOrig = dateOrigFile[:-4]
@@ -822,6 +853,40 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 equal += 1
             equal = 0
             flagInit = True
+            
+            # Handle black code recovery - capture code now if needed
+            if needs_recovery:
+                info = frame[:, REMOVE:, :]
+                code = info[CODETOP:CODEBOTTOM, CODELEFT:CODERIGHT]
+                # Check if code is still black (extremely rare double black code)
+                gray = cv2.cvtColor(code, cv2.COLOR_BGR2GRAY)
+                _, thresh = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+                if cv2.countNonZero(thresh) == 0:
+                    raise BlackCodeException('Black code detected on BOTH passes - unable to recover')
+                
+                print(f'Recovered code for {date} on second pass')
+                cv2.imwrite('out/' + dateOrigFile, code)
+                
+                # Update result_arr with code image reference
+                ind = row - initRow
+                if print_to_file:
+                    result_arr[ind][11] = dateOrigFile  # Update the code cell
+                else:
+                    for attempt in range(20):
+                        file1 = drive.CreateFile({'title' : dateOrigFile, 'parents': [{'id': FOLDERID}]})
+                        file1.SetContentFile('out/' + dateOrigFile)
+                        file1['mimeType'] = 'image/png'
+                        try:
+                            file1.Upload()
+                            print('Uploaded recovered code image to Google Drive')
+                            break
+                        except:
+                            if attempt < 4:
+                                print('Google Drive upload failed, retrying...')
+                            else:
+                                raise Exception('Error uploading image to Google Drive')
+                    result_arr[ind][11] = '=IMAGE("https://drive.google.com/uc?export=view&id=' + file1['id'] + '")'
+            
             if not rand:
                 continue
 
@@ -912,14 +977,16 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 writer = csv.writer(csv_file)
                 writer.writerows(result_arr)
             for i in range(0, len(toRemove)):
-                shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + '/' + toRemove[i][0])
+                if os.path.isfile('out/' + toRemove[i][0]):
+                    shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + '/' + toRemove[i][0])
             print('Wrote data to out/' + filename[:-4] + '/full_scenarios.csv')
         else:
             wks.update_values(crange='A' + str(initRow) + ':S' + str(endRow), values=result_arr)
             print('Uploaded data from ' + filename + ' to Leo\'s Codes')
             shutil.move('videos/' + filename, new_path('videos/done/' + filename))
             for i in range(0, len(toRemove)):
-                os.remove('out/' + toRemove[i][0])
+                if os.path.isfile('out/' + toRemove[i][0]):
+                    os.remove('out/' + toRemove[i][0])
         cam.release()
     except Exception as e:
         print(e)
@@ -927,17 +994,19 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         if print_to_file:
             os.removedirs('out/' + filename[:-4])
         for i in range(0, len(toRemove)):
-            print('Trashing file: '+ toRemove[i][0])
-            os.remove('out/' + toRemove[i][0])
-            if not print_to_file:
-                # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
-                while True:
-                    file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
-                    if len(file_list) == 1:
-                        break
-                    time.sleep(0.5)
-                file = file_list[0]
-                file.Trash()
+            # Only try to remove files that exist (black code scenarios may not have files)
+            if os.path.isfile('out/' + toRemove[i][0]):
+                print('Trashing file: '+ toRemove[i][0])
+                os.remove('out/' + toRemove[i][0])
+                if not print_to_file:
+                    # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
+                    while True:
+                        file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
+                        if len(file_list) == 1:
+                            break
+                        time.sleep(0.5)
+                    file = file_list[0]
+                    file.Trash()
         raise e
 
 if __name__ == '__main__':
