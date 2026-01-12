@@ -5,3 +5,4 @@ levenshtein
 pydrive
 pygsheets
 scikit-image
+pytesseract

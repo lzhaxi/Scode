@@ -220,16 +220,17 @@ def get_date(frame, lang='en'):
     col_sums = np.sum(date, axis=2)  # shape: (h, w) - sum of RGB values per pixel
     black_counts = np.sum(col_sums < 100, axis=0)  # count of black pixels per column
     
-    # Find first occurrence of 7+ consecutive columns with >= 15 black pixels
+    # Find trailing black region by searching from RIGHT to LEFT
+    # This avoids premature cutoff at gaps between date components (e.g., between year and 2-digit hours like "10:23")
     stop_idx = w
     stop = 0
-    for x in range(w):
+    for x in range(w - 1, -1, -1):  # Search from right to left
         if black_counts[x] >= 15:
             stop += 1
         else:
             stop = 0
         if stop > 7:
-            stop_idx = x
+            stop_idx = x + 8  # Keep everything up to the start of the trailing black region
             break
     date = date[:, :stop_idx]
     # assume last two letters are PM or AM, separate the two parts and use detect_text with different config
@@ -911,7 +912,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 writer = csv.writer(csv_file)
                 writer.writerows(result_arr)
             for i in range(0, len(toRemove)):
-                shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + toRemove[i][0])
+                shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + '/' + toRemove[i][0])
             print('Wrote data to out/' + filename[:-4] + '/full_scenarios.csv')
         else:
             wks.update_values(crange='A' + str(initRow) + ':S' + str(endRow), values=result_arr)
