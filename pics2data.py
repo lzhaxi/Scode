@@ -23,12 +23,17 @@ def main(filename='video_from_images.mp4', lang='en', print_to_file=False, rand=
     for i in range(len(images)-1, -1, -1):
         image_path = os.path.join('pictures', images[i])
         frame = cv2.imread(image_path)
-        if frame.shape != (720, 1280, 3):
+        if frame.shape not in v.SUPPORTED_RESOLUTIONS:
             if rand:
-                print('Error: one or more of the images is not 720p. Cannot run due to rand flag')
+                print(f'Error: one or more of the images is not a supported resolution (720p, 1080p). Cannot run due to rand flag')
                 return
-            print('Image at ' + image_path + ' is not 720p. Skipping..')
+            print(f'Image at {image_path} is not a supported resolution (720p, 1080p). Skipping..')
             del images[i]
+        elif v.SUPPORTED_RESOLUTIONS[frame.shape] is not None:
+            # Resize 1080p images to 720p
+            resized = v.resize_frame(frame)
+            cv2.imwrite(image_path, resized)
+            print(f'Resized {image_path} from 1080p to 720p')
 
     images.sort()
     with open('image_file_list.txt', 'w') as f:
