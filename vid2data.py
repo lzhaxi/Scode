@@ -296,10 +296,11 @@ def get_date_helper(letters, slash=False, lang='en'):
         # code has a hard time recognizing certain digits, so I have multiple examples
         if result == '9' or result == '4':
             four = ssim(letters[i], get_cached_image('ground_truths/letter_data/42.png'))
+            four2 = ssim(letters[i], get_cached_image('ground_truths/letter_data/43.png'))
             nine = ssim(letters[i], get_cached_image('ground_truths/letter_data/92.png'))
             nine2 = ssim(letters[i], get_cached_image('ground_truths/letter_data/93.png'))
-            let_list = [result, '4', '9', '9']
-            result_list = [np.max(results), four, nine, nine2]
+            let_list = [result, '4', '4', '9', '9']
+            result_list = [np.max(results), four, four2, nine, nine2]
             result = let_list[np.argmax(result_list)]
         if result == '5' or result == '6' or result == '8':
             five = ssim(letters[i], get_cached_image('ground_truths/letter_data/52.png'))
