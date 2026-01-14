@@ -257,8 +257,13 @@ def get_date(frame, lang='en'):
     if slashes < 2:
         date, slash_ind, slashes = get_date_helper(letters, slash=True, lang=lang)
     if lang == 'en':
-        result = np.sum(letters[-1][:, 6:])
-        if result < 24300: # value obtained from looking at the average sum of the right half of A and P, as P should have a lower sum. P generally 20k-23k, A was 25.5k-26.5k
+        # Use top/bottom ratio to distinguish A from P
+        # A is symmetric (ratio ~1.12-1.14), P has bowl at top only (ratio ~1.44)
+        last_letter = letters[-1]
+        h = last_letter.shape[0]
+        top_sum = np.sum(last_letter[:h//2, :])
+        bottom_sum = np.sum(last_letter[h//2:, :])
+        if bottom_sum > 0 and (top_sum / bottom_sum) > 1.25:
             date += 'PM'
         else:
             date += 'AM'
@@ -296,11 +301,12 @@ def get_date_helper(letters, slash=False, lang='en'):
             let_list = [result, '4', '9', '9']
             result_list = [np.max(results), four, nine, nine2]
             result = let_list[np.argmax(result_list)]
-        if result == '5' or result == '6':
+        if result == '5' or result == '6' or result == '8':
             five = ssim(letters[i], get_cached_image('ground_truths/letter_data/52.png'))
             six = ssim(letters[i], get_cached_image('ground_truths/letter_data/62.png'))
-            let_list = [result, '5', '6']
-            result_list = [np.max(results), five, six]
+            eight = ssim(letters[i], get_cached_image('ground_truths/letter_data/8.png'))
+            let_list = [result, '5', '6', '8']
+            result_list = [np.max(results), five, six, eight]
             result = let_list[np.argmax(result_list)]
         if result == '1' or result == '7':
             seven1 = ssim(letters[i], get_cached_image('ground_truths/letter_data/72.png'))
