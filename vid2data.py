@@ -5,6 +5,7 @@ import csv
 import warnings
 import time
 import socket
+import signal
 
 import pygsheets
 from pydrive.auth import GoogleAuth
@@ -772,12 +773,22 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             print('Error: Images are all the same scenario code')
             return
 
-        # Check if there are black codes that need recovery but no random rotations to enable second pass
-        if black_code_recovery and not flagRand:
-            raise BlackCodeException('Black code detected with no random rotations - unable to recover via second pass')
+        # Check if there are black codes that need recovery
+        # We need to check if the video continues (user scrolled backwards) to enable second pass
+        video_continues = False
+        if black_code_recovery:
+            # Check if there are more frames after the forward pass
+            test_cam = cv2.VideoCapture('videos/' + filename)
+            test_cam.set(cv2.CAP_PROP_POS_FRAMES, currentFrame + 15)  # Skip ahead past the "same frames"
+            ret_test, _ = test_cam.read()
+            video_continues = ret_test
+            test_cam.release()
+            
+            if not video_continues:
+                raise BlackCodeException('Black code detected but video does not continue - unable to recover')
 
-        # unnecessary to run the rest of the code if there are no random weapons
-        if not flagRand:
+        # unnecessary to run the rest of the code if there are no random weapons AND no black codes needing recovery
+        if not flagRand and not black_code_recovery:
             if print_to_file:
                 with open('out/' + filename[:-4] + '/full_scenarios.csv', 'w', newline='') as csv_file:
                     writer = csv.writer(csv_file)
@@ -998,8 +1009,11 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 if os.path.isfile('out/' + toRemove[i][0]):
                     os.remove('out/' + toRemove[i][0])
         cam.release()
-    except BlackCodeException as e:
-        print(e)
+    except (BlackCodeException, KeyboardInterrupt) as e:
+        if isinstance(e, KeyboardInterrupt):
+            print('\nScript interrupted by user')
+        else:
+            print(e)
         cam.release()
         if print_to_file:
             if os.path.exists('out/' + filename[:-4]):
@@ -1018,13 +1032,14 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                         time.sleep(0.5)
                     file = file_list[0]
                     file.Trash()
-        # Move video to black folder instead of raising exception
-        black_folder = 'videos/black'
-        if not os.path.exists(black_folder):
-            os.makedirs(black_folder)
-        shutil.move('videos/' + filename, new_path(black_folder + '/' + filename))
-        print(f'Moved {filename} to {black_folder}/')
-        raise  # Re-raise to signal caller to continue with next video
+        # For black code, move video to black folder; for KeyboardInterrupt, just re-raise
+        if isinstance(e, BlackCodeException):
+            black_folder = 'videos/black'
+            if not os.path.exists(black_folder):
+                os.makedirs(black_folder)
+            shutil.move('videos/' + filename, new_path(black_folder + '/' + filename))
+            print(f'Moved {filename} to {black_folder}/')
+        raise  # Re-raise to signal caller
     except Exception as e:
         print(e)
         cam.release()
@@ -1080,6 +1095,8 @@ if __name__ == '__main__':
                 except BlackCodeException:
                     print(f'Continuing with remaining videos after black code in {vid}')
                     continue
+    except KeyboardInterrupt:
+        print('\nStopping script due to user interrupt')
     except IndexError as e:
         print('Likely a Job Not Complete, please check the video.')
     except Exception as e:
