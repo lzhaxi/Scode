@@ -123,9 +123,12 @@ GREENROUND = {'en': 100, 'eu': 90, 'jp': 1}
 # jp value is a placeholder
 
 class BlackCodeException(Exception):
-    def __init__(self, message="The video contains a code that has been missed by the nintendo switch capture software. Please manually remove the frame or frames from the video and re-run the script."):
+    """Raised when a black code is encountered and recovery is not possible.
+    The video will be moved to the 'black' folder and processing will continue with other videos."""
+    def __init__(self, message="Black code detected - moving video to black folder"):
         self.message = message
         super().__init__(self.message)
+
 
 def leven(tess, key, lang='en'):
     """
@@ -995,11 +998,39 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 if os.path.isfile('out/' + toRemove[i][0]):
                     os.remove('out/' + toRemove[i][0])
         cam.release()
+    except BlackCodeException as e:
+        print(e)
+        cam.release()
+        if print_to_file:
+            if os.path.exists('out/' + filename[:-4]):
+                os.removedirs('out/' + filename[:-4])
+        for i in range(0, len(toRemove)):
+            # Only try to remove files that exist (black code scenarios may not have files)
+            if os.path.isfile('out/' + toRemove[i][0]):
+                print('Trashing file: '+ toRemove[i][0])
+                os.remove('out/' + toRemove[i][0])
+                if not print_to_file:
+                    # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
+                    while True:
+                        file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
+                        if len(file_list) == 1:
+                            break
+                        time.sleep(0.5)
+                    file = file_list[0]
+                    file.Trash()
+        # Move video to black folder instead of raising exception
+        black_folder = 'videos/black'
+        if not os.path.exists(black_folder):
+            os.makedirs(black_folder)
+        shutil.move('videos/' + filename, new_path(black_folder + '/' + filename))
+        print(f'Moved {filename} to {black_folder}/')
+        raise  # Re-raise to signal caller to continue with next video
     except Exception as e:
         print(e)
         cam.release()
         if print_to_file:
-            os.removedirs('out/' + filename[:-4])
+            if os.path.exists('out/' + filename[:-4]):
+                os.removedirs('out/' + filename[:-4])
         for i in range(0, len(toRemove)):
             # Only try to remove files that exist (black code scenarios may not have files)
             if os.path.isfile('out/' + toRemove[i][0]):
@@ -1026,22 +1057,29 @@ if __name__ == '__main__':
         if not args.vids:
             flagRan = False
             for filename in os.listdir('videos'):
-                if filename.endswith('.mp4'):
-                    main(filename, args.lang, args.print)
+                try:
+                    if filename.endswith('.mp4'):
+                        main(filename, args.lang, args.print)
+                        flagRan = True
+                    if filename.endswith('.mov'):
+                        main(filename, args.lang, args.print)
+                        flagRan = True
+                except BlackCodeException:
+                    print(f'Continuing with remaining videos after black code in {filename}')
                     flagRan = True
-                if filename.endswith('.mov'):
-                    main(filename, args.lang, args.print)
-                    flagRan = True
+                    continue
             if not flagRan:
                 print('No videos in the directory! Note that only .mov and .mp4 files are supported.')
         else:
             for vid in args.vids:
-                if os.path.exists('videos/' + vid):
-                    main(vid, args.lang, args.print)
-                else:
-                    print(vid + ' does not exist. Please check to make sure it has been placed in the /videos directory')
-    except BlackCodeException as e:
-        print('Stopped running due to black code exception')
+                try:
+                    if os.path.exists('videos/' + vid):
+                        main(vid, args.lang, args.print)
+                    else:
+                        print(vid + ' does not exist. Please check to make sure it has been placed in the /videos directory')
+                except BlackCodeException:
+                    print(f'Continuing with remaining videos after black code in {vid}')
+                    continue
     except IndexError as e:
         print('Likely a Job Not Complete, please check the video.')
     except Exception as e:
