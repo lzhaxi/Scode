@@ -17,6 +17,63 @@ import cv2
 import pytesseract
 import argparse
 from Levenshtein import distance as levenshtein
+import sys
+
+# Progress bar for console output
+class ProgressBar:
+    """Lightweight progress bar that updates in-place to reduce console spam."""
+    def __init__(self, total, prefix='', width=30, video_num=None, total_videos=None):
+        self.total = max(1, total)  # Avoid division by zero
+        self.width = width
+        self.prefix = prefix
+        self.video_num = video_num
+        self.total_videos = total_videos
+        self.current = 0
+        self.last_percent = -1
+        self.scenarios_found = 0
+    
+    def update(self, current, scenarios=None):
+        """Update progress bar. Only redraws if percentage changed."""
+        self.current = current
+        if scenarios is not None:
+            self.scenarios_found = scenarios
+        percent = int(100 * current / self.total)
+        if percent == self.last_percent:
+            return  # Skip redraw if no change
+        self.last_percent = percent
+        
+        filled = int(self.width * current / self.total)
+        bar = '█' * filled + '░' * (self.width - filled)
+        
+        video_info = ''
+        if self.video_num is not None and self.total_videos is not None:
+            video_info = f'[Video {self.video_num}/{self.total_videos}] '
+        
+        scenario_info = f' | Scenarios: {self.scenarios_found}' if self.scenarios_found > 0 else ''
+        
+        line = f'\r{video_info}{self.prefix} [{bar}] {percent:3d}%{scenario_info}'
+        sys.stdout.write(line)
+        sys.stdout.flush()
+    
+    def finish(self, message=None):
+        """Complete the progress bar and move to next line."""
+        if message:
+            self.clear_line()
+            print(message)
+        else:
+            print()  # Just newline to preserve the bar
+    
+    def clear_line(self):
+        """Clear the current line."""
+        sys.stdout.write('\r' + ' ' * 80 + '\r')
+        sys.stdout.flush()
+
+
+def print_status(message, end='\n'):
+    """Print a status message, clearing any progress bar first."""
+    sys.stdout.write('\r' + ' ' * 80 + '\r')  # Clear line
+    print(message, end=end)
+    sys.stdout.flush()
 
 # constants
 
@@ -514,19 +571,21 @@ def new_path(path):
         path = path_next + '_' + str(counter) + path_ext
     return path
 
-def main(filename, lang='en', print_to_file=False, single=False, from_pics = False):
+def main(filename, lang='en', print_to_file=False, single=False, from_pics=False, video_num=None, total_videos=None):
     """
     Parameters:
     filename: name of file to be read
     print_to_file: whether file should be uploaded to sheets or printed to csv
     single: usage with pics2data, whether the video is of a single scenario
     from_pics: comes from pics2data, the green value is slightly lower for some reason when using pics
+    video_num: current video number in batch (for progress display)
+    total_videos: total number of videos in batch (for progress display)
     """
     socket.setdefaulttimeout(30) # set timeout for socket operations to 10 seconds, to prevent google drive upload file errors
-    print('Current file is: ' + filename)
+    print_status(f'Processing: {filename}')
     if not print_to_file:
         # setup for google drive
-        print('Authenticating with Google Drive...', end=' ')
+        print_status('Authenticating with Google Drive...', end='')
         # ignore warning if creds.txt is not there
         warnings.filterwarnings('ignore')
         gauth = GoogleAuth(settings_file='settings.yaml')
@@ -550,11 +609,11 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         # Open spreadsheet and then worksheet
         sh = gc.open('Leo\'s codes v3.1')
         wks = sh.worksheet_by_title('Codes')
-        print('Done')
+        print_status('Google Drive authenticated')
     else:
         path = 'out/' + filename[:-4]
         if (os.path.exists(path)):
-            print("Error: directory " + path + " already exists. Exiting...")
+            print_status(f"Error: directory {path} already exists. Exiting...")
             return
         os.mkdir('out/' + filename[:-4])
 
@@ -567,19 +626,26 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
 
 
     cam = cv2.VideoCapture('videos/' + filename)
+    
+    # Get total frame count from video metadata (fast, no iteration needed)
+    total_frames = int(cam.get(cv2.CAP_PROP_FRAME_COUNT))
+    
     ret, nextFrame = cam.read()
     if not ret:
-        print('Error: No frame read from video')
+        print_status('Error: No frame read from video')
         return
     
     # Check if resolution is supported and resize if needed
     if nextFrame.shape not in SUPPORTED_RESOLUTIONS:
-        print(f'Error: Video resolution {nextFrame.shape[1]}x{nextFrame.shape[0]} is not supported. Supported: 720p, 1080p')
+        print_status(f'Error: Video resolution {nextFrame.shape[1]}x{nextFrame.shape[0]} is not supported. Supported: 720p, 1080p')
         return
     needs_resize = SUPPORTED_RESOLUTIONS[nextFrame.shape] is not None
     if needs_resize:
-        print(f'Detected {nextFrame.shape[1]}x{nextFrame.shape[0]} video, will resize frames to 720p')
+        print_status(f'Detected {nextFrame.shape[1]}x{nextFrame.shape[0]} video, resizing to 720p')
         nextFrame = resize_frame(nextFrame)
+    
+    # Initialize progress bar for Pass 1 (forward pass)
+    progress = ProgressBar(total_frames, prefix='Pass 1', video_num=video_num, total_videos=total_videos)
 
     nextDate = get_date(nextFrame, lang)
     equal = 0 # how many frames in a row have been equivalent
@@ -608,6 +674,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             if ret and needs_resize:
                 nextFrame = resize_frame(nextFrame)
             currentFrame += 1
+            progress.update(currentFrame, scenarios=len(result_arr))
             if ret:
                 nextDate = get_date(nextFrame, lang)
             # if reached end of the video, get data from current frame, then break
@@ -619,7 +686,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                     frames_same = date == nextDate or compare_image_diff(frame, nextFrame)
                 except BlackCodeException:
                     # Black code detected - we'll try to recover it on second pass
-                    print(f'Black code detected on frame {currentFrame}, will attempt recovery on second pass')
+                    progress.clear_line()
+                    print_status(f'Black code on frame {currentFrame}, will attempt recovery')
                     frames_same = False  # Treat as different frame to process this scenario
                     # Mark that we need to capture this scenario's code on second pass
                     # (We'll add to black_code_recovery after building dateFile)
@@ -642,14 +710,15 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             # check whether file already exists locally, meaning during this run
             # indicates weapons phase has already been reached
             if os.path.isfile('out/' + dateFile):
-                print('Probably an error that ' + date + ' file already exists on frame ' + str(currentFrame))
+                progress.clear_line()
+                print_status(f'Error: {date} file already exists on frame {currentFrame}')
                 break
 
             equal = 0 # different frame, so reset the number of consecutive equivalent frames
             if '-' in date:
                 # date containing '-' indicates that the scenario has not been played yet
                 continue
-            print('Getting data for frame ' + str(currentFrame), end='... ')
+            # Progress bar already shows frame progress, no need for per-frame print
             info = frame[:, REMOVE:]
             # get data
             # determine number of waves with the checkmarks indicating whether a wave was passed
@@ -662,7 +731,6 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             map = np.pad(map, ((0, 0), (10, 10), (0, 0)), mode='edge')
             map = leven(detect_text(map), stage_key)
             # rotation weapons
-            print('Getting rotation weapons...', end=' ')
             rot1 = info[RTOP:RBOTTOM, RLEFT:RLEFT+RWIDTH]
             rot2 = info[RTOP:RBOTTOM, RLEFT+RWIDTH:RLEFT+2*RWIDTH]
             rot3 = info[RTOP:RBOTTOM, RLEFT+2*RWIDTH:RLEFT+3*RWIDTH]
@@ -677,7 +745,6 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                     if similarity[i] > max[i][0]:
                         max[i][0] = similarity[i]
                         max[i][1] = rotfilename[:-4]
-            print('Done')
             if max[0][1] == 'Random' or max[0][1] == 'Gold Random':
                 # hard to tell apart random and gold question mark, so use color values
                 color_sums = cv2.sumElems(rot1)
@@ -720,7 +787,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 wave4 = '?' # if loss occurred, boss is unknown
             # handling when get_wave_type returns null, which usually means pytesseract got a blank string
             if any('Null' in ele for ele in [wave1, wave2, wave3, wave4]):
-                print('Wave type returned Null, please correct manually\nDate: ' + date + ', frame: ' + str(currentFrame))
+                progress.clear_line()
+                print_status(f'Warning: Wave type Null in {date} (frame {currentFrame})')
                 cv2.imwrite('out/Null_' + dateFile[:-4] + '_' + str(currentFrame) + '.png', frame)
             # hazard level
             haz = get_hazard(info)
@@ -746,11 +814,11 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                         file1['mimeType'] = 'image/png'
                         try:
                             file1.Upload()
-                            print('Uploaded code image to Google Drive')
+                            # Silent success - no need to print for each upload
                             break
                         except:
                             if attempt < 4:
-                                print('Google Drive upload failed, retrying...')
+                                pass  # Silently retry
                             else:
                                 raise Exception('Error uploading image to Google Drive')
                     code_cell = '=IMAGE("https://drive.google.com/uc?export=view&id=' + file1['id'] + '")'
@@ -764,13 +832,14 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             result_arr.append(table_row)
             row += 1
             flagInit = False
-            print('Done with ' + date + ' or frame ' + str(currentFrame))
+            # No per-scenario print - progress bar shows count
+        progress.finish(f'Pass 1 complete: {len(result_arr)} scenarios found')
         if not print_to_file:
             endRow = row - 1
             wks.adjust_row_height(initRow, end=endRow, pixel_size=35)
         cam.release()
         if flagInit:
-            print('Error: Images are all the same scenario code')
+            print_status('Error: Images are all the same scenario code')
             return
 
         # Check if there are black codes that need recovery
@@ -797,10 +866,10 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                     # Only move file if it exists (won't exist for black code scenarios)
                     if os.path.isfile('out/' + toRemove[i][0]):
                         shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + '/' + toRemove[i][0])
-                print('Wrote data to out/' + filename[:-4] + '/full_scenarios.csv')
+                print_status(f'Complete: Wrote {len(result_arr)} scenarios to out/{filename[:-4]}/full_scenarios.csv')
             else:
                 wks.update_values(crange='A' + str(initRow) + ':S' + str(endRow), values=result_arr)
-                print('Uploaded data from ' + filename + ' to Leo\'s Codes')
+                print_status(f'Complete: Uploaded {len(result_arr)} scenarios from {filename}')
                 shutil.move('videos/' + filename, new_path('videos/done/' + filename))
                 # only really consider it as done when it is uploaded to the sheet, not just saved locally
                 for i in range(0, len(toRemove)):
@@ -819,11 +888,17 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         flagInit = False
         flagEqual = False
         equal = 0
+        
+        # Progress bar for Pass 2 (reverse pass for random weapons / code recovery)
+        progress2 = ProgressBar(len(toRemove), prefix='Pass 2', video_num=video_num, total_videos=total_videos)
+        pass2_idx = 0
+        
         for dateOrigFile, prevFrame, rand, waves, row, needs_recovery in reversed(toRemove):
             if flagEqual:
                 break
             dateOrig = dateOrigFile[:-4]
-            print('Checking for random weapons in ' + dateOrig + ' or frame ' + str(currentFrame))
+            pass2_idx += 1
+            progress2.update(pass2_idx)
             frame = nextFrame
             date = nextDate
             while '-' in date:
@@ -836,8 +911,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             dateFile = date.replace(':', ' ')
             dateFile = dateFile.replace('/', ' ')
             if dateOrig != dateFile:
-                print('Possible Error: Frame for wave types is not the same as frame for weapons. Check /out directory for more info.')
-                print('dateOrig:' + dateOrig + ', date:' + dateFile)
+                progress2.clear_line()
+                print_status(f'Warning: Date mismatch in Pass 2: {dateOrig} vs {dateFile}')
                 file_mode = 'a' if os.path.exists('out/log.txt') else 'w'
                 with open('out/log.txt', file_mode) as f:
                     f.write('date: ' + dateFile + ', frame: ' + str(currentFrame) + ', prevFrame: ' + str(prevFrame) + ', row: ' + str(row) + '\n')
@@ -885,7 +960,8 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                 if cv2.countNonZero(thresh) == 0:
                     raise BlackCodeException('Black code detected on BOTH passes - unable to recover')
                 
-                print(f'Recovered code for {date} on second pass')
+                progress2.clear_line()
+                print_status(f'Recovered code for {date}')
                 cv2.imwrite('out/' + dateOrigFile, code)
                 
                 # Update result_arr with code image reference
@@ -899,11 +975,11 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
                         file1['mimeType'] = 'image/png'
                         try:
                             file1.Upload()
-                            print('Uploaded recovered code image to Google Drive')
+                            # Silent success
                             break
                         except:
                             if attempt < 4:
-                                print('Google Drive upload failed, retrying...')
+                                pass  # Silently retry
                             else:
                                 raise Exception('Error uploading image to Google Drive')
                     result_arr[ind][11] = '=IMAGE("https://drive.google.com/uc?export=view&id=' + file1['id'] + '")'
@@ -911,7 +987,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             if not rand:
                 continue
 
-            print('Getting random weapons for ' + date + '...', end=' ')
+            # Getting random weapons - no per-scenario print needed
             info = frame[:, REMOVE:, :]
             right = WRIGHT
             top = WTOP
@@ -992,7 +1068,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             if waves > 3:
                 result_arr[ind][10] = weaps[-4]
                 result_arr[ind][18] = weaps_filter[-4]
-            print('Done')
+        progress2.finish(f'Pass 2 complete: Random weapons processed')
         if print_to_file:
             with open('out/' + filename[:-4] + '/full_scenarios.csv', 'w', newline='') as csv_file:
                 writer = csv.writer(csv_file)
@@ -1000,10 +1076,10 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             for i in range(0, len(toRemove)):
                 if os.path.isfile('out/' + toRemove[i][0]):
                     shutil.move('out/' + toRemove[i][0], 'out/' + filename[:-4] + '/' + toRemove[i][0])
-            print('Wrote data to out/' + filename[:-4] + '/full_scenarios.csv')
+            print_status(f'Complete: Wrote {len(result_arr)} scenarios to out/{filename[:-4]}/full_scenarios.csv')
         else:
             wks.update_values(crange='A' + str(initRow) + ':S' + str(endRow), values=result_arr)
-            print('Uploaded data from ' + filename + ' to Leo\'s Codes')
+            print_status(f'Complete: Uploaded {len(result_arr)} scenarios from {filename}')
             shutil.move('videos/' + filename, new_path('videos/done/' + filename))
             for i in range(0, len(toRemove)):
                 if os.path.isfile('out/' + toRemove[i][0]):
@@ -1011,9 +1087,9 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         cam.release()
     except (BlackCodeException, KeyboardInterrupt) as e:
         if isinstance(e, KeyboardInterrupt):
-            print('\nScript interrupted by user')
+            print_status('\nScript interrupted by user')
         else:
-            print(e)
+            print_status(str(e))
         cam.release()
         if print_to_file:
             if os.path.exists('out/' + filename[:-4]):
@@ -1021,7 +1097,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         for i in range(0, len(toRemove)):
             # Only try to remove files that exist (black code scenarios may not have files)
             if os.path.isfile('out/' + toRemove[i][0]):
-                print('Trashing file: '+ toRemove[i][0])
+                # Silent cleanup - no need to print
                 os.remove('out/' + toRemove[i][0])
                 if not print_to_file:
                     # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
@@ -1038,10 +1114,10 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
             if not os.path.exists(black_folder):
                 os.makedirs(black_folder)
             shutil.move('videos/' + filename, new_path(black_folder + '/' + filename))
-            print(f'Moved {filename} to {black_folder}/')
+            print_status(f'Moved {filename} to {black_folder}/')
         raise  # Re-raise to signal caller
     except Exception as e:
-        print(e)
+        print_status(f'Error: {e}')
         cam.release()
         if print_to_file:
             if os.path.exists('out/' + filename[:-4]):
@@ -1049,7 +1125,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics = Fal
         for i in range(0, len(toRemove)):
             # Only try to remove files that exist (black code scenarios may not have files)
             if os.path.isfile('out/' + toRemove[i][0]):
-                print('Trashing file: '+ toRemove[i][0])
+                # Silent cleanup
                 os.remove('out/' + toRemove[i][0])
                 if not print_to_file:
                     # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
@@ -1070,34 +1146,34 @@ if __name__ == '__main__':
     args = parser.parse_args()
     try:
         if not args.vids:
-            flagRan = False
-            for filename in os.listdir('videos'):
-                try:
-                    if filename.endswith('.mp4'):
-                        main(filename, args.lang, args.print)
-                        flagRan = True
-                    if filename.endswith('.mov'):
-                        main(filename, args.lang, args.print)
-                        flagRan = True
-                except BlackCodeException:
-                    print(f'Continuing with remaining videos after black code in {filename}')
-                    flagRan = True
-                    continue
-            if not flagRan:
-                print('No videos in the directory! Note that only .mov and .mp4 files are supported.')
+            # Get list of video files
+            video_files = [f for f in os.listdir('videos') if f.endswith('.mp4') or f.endswith('.mov')]
+            total_videos = len(video_files)
+            if total_videos == 0:
+                print_status('No videos in the directory! Only .mov and .mp4 files are supported.')
+            else:
+                print_status(f'Found {total_videos} video(s) to process')
+                for idx, filename in enumerate(video_files, 1):
+                    try:
+                        main(filename, args.lang, args.print, video_num=idx, total_videos=total_videos)
+                    except BlackCodeException:
+                        print_status(f'Continuing after black code in {filename}')
+                        continue
         else:
-            for vid in args.vids:
+            total_videos = len(args.vids)
+            print_status(f'Processing {total_videos} specified video(s)')
+            for idx, vid in enumerate(args.vids, 1):
                 try:
                     if os.path.exists('videos/' + vid):
-                        main(vid, args.lang, args.print)
+                        main(vid, args.lang, args.print, video_num=idx, total_videos=total_videos)
                     else:
-                        print(vid + ' does not exist. Please check to make sure it has been placed in the /videos directory')
+                        print_status(f'{vid} does not exist in /videos directory')
                 except BlackCodeException:
-                    print(f'Continuing with remaining videos after black code in {vid}')
+                    print_status(f'Continuing after black code in {vid}')
                     continue
     except KeyboardInterrupt:
-        print('\nStopping script due to user interrupt')
+        print_status('\nStopping script due to user interrupt')
     except IndexError as e:
-        print('Likely a Job Not Complete, please check the video.')
+        print_status('Likely a Job Not Complete, please check the video.')
     except Exception as e:
-        print('Error: ' + str(e))
+        print_status(f'Error: {e}')
