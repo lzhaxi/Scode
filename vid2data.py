@@ -683,7 +683,33 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             elif ret:
                 # Check if frames are the same - catch BlackCodeException to defer code capture
                 try:
-                    frames_same = date == nextDate or compare_image_diff(frame, nextFrame)
+                    img_diff = compare_image_diff(frame, nextFrame)
+                    if not img_diff and date == nextDate:
+                        # check if this is a job not complete
+                        info_check = frame[:, REMOVE:]
+                        red_c = get_num_waves(info_check, 'ground_truths/template_x.png', lang)
+                        green_c = get_num_waves(info_check, 'ground_truths/template_check.png', lang)
+                        waves_c = red_c + green_c
+                        is_jnc_frame = False
+                        if waves_c == 0:
+                            is_jnc_frame = True
+                        else:
+                            top_c = WAVETYPETOP[waves_c - 1]
+                            w1_c = get_wave_type(info_check[top_c:top_c+WAVEHEIGHT, WAVETYPELEFT:WAVETYPELEFT+WAVEWIDTH], event_key, water_key)
+                            if 'Null' in w1_c:
+                                is_jnc_frame = True
+                        
+                        if is_jnc_frame:
+                            # It is a JNC, so the date match is fake.
+                            # Mask second-frame animation blurs by checking recently removed
+                            if len(toRemove) > 0 and currentFrame - toRemove[-1][1] <= 1:
+                                frames_same = True
+                            else:
+                                frames_same = False
+                        else:
+                            frames_same = True
+                    else:
+                        frames_same = img_diff or date == nextDate
                 except BlackCodeException:
                     # Black code detected - we'll try to recover it on second pass
                     progress.clear_line()
@@ -788,8 +814,11 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             # handling when get_wave_type returns null, which usually means pytesseract got a blank string
             if any('Null' in ele for ele in [wave1, wave2, wave3, wave4]):
                 progress.clear_line()
-                print_status(f'Warning: Wave type Null in {date} (frame {currentFrame})')
-                cv2.imwrite('out/Null_' + dateFile[:-4] + '_' + str(currentFrame) + '.png', frame)
+                print_status(f'Job Not Complete detected in {date} (frame {currentFrame}), skipping scenario')
+                # Add to toRemove with is_jnc=True so Pass 2 knows to skip it while maintaining sync
+                toRemove.append([dateFile, currentFrame, False, 0, -1, False, True]) # is_jnc=True
+                flagInit = False
+                continue
             # hazard level
             haz = get_hazard(info)
 
@@ -797,7 +826,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             if black_code_on_current_frame:
                 # Don't save code image yet - mark for recovery (only works if there are random rotations)
                 black_code_recovery[dateFile] = len(result_arr)  # Index in result_arr
-                toRemove.append([dateFile, currentFrame, rand, waves, row, True])  # True = needs code recovery
+                toRemove.append([dateFile, currentFrame, rand, waves, row, True, False])  # True = needs code recovery, False=is_jnc
                 if print_to_file:
                     code_cell = dateFile  # Placeholder, will be updated on recovery
                 else:
@@ -805,7 +834,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             else:
                 code = info[CODETOP:CODEBOTTOM, CODELEFT:CODERIGHT]
                 cv2.imwrite('out/' + dateFile, code)
-                toRemove.append([dateFile, currentFrame, rand, waves, row, False])  # False = no recovery needed
+                toRemove.append([dateFile, currentFrame, rand, waves, row, False, False])  # False = no recovery needed, False=is_jnc
                 if not print_to_file:
                     for attempt in range(20):
                         # save image of code to google drive
@@ -893,7 +922,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
         progress2 = ProgressBar(len(toRemove), prefix='Pass 2', video_num=video_num, total_videos=total_videos)
         pass2_idx = 0
         
-        for dateOrigFile, prevFrame, rand, waves, row, needs_recovery in reversed(toRemove):
+        for dateOrigFile, prevFrame, rand, waves, row, needs_recovery, is_jnc in reversed(toRemove):
             if flagEqual:
                 break
             dateOrig = dateOrigFile[:-4]
@@ -917,14 +946,16 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 with open('out/log.txt', file_mode) as f:
                     f.write('date: ' + dateFile + ', frame: ' + str(currentFrame) + ', prevFrame: ' + str(prevFrame) + ', row: ' + str(row) + '\n')
                 frameNum = '_' + str(prevFrame) + '_' + str(currentFrame) + '_'
-                cv2.imwrite('out/frame' + frameNum + filename[:-4] + '.png', frame)
+                if frame is not None and frame.size > 0:
+                    cv2.imwrite('out/frame' + frameNum + filename[:-4] + '.png', frame)
                 cam2 = cv2.VideoCapture('videos/' + filename)
                 for i in range(0, prevFrame):
                     cam2.read()
                 ret, prevF = cam2.read()
                 if ret and needs_resize:
                     prevF = resize_frame(prevF)
-                cv2.imwrite('out/pFrame' + frameNum + filename[:-4] + '.png', prevF)
+                if prevF is not None and prevF.size > 0:
+                    cv2.imwrite('out/pFrame' + frameNum + filename[:-4] + '.png', prevF)
                 cam2.release()
             ret, nextFrame = cam.read()
             if ret and needs_resize:
