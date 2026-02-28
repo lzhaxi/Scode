@@ -871,22 +871,44 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             print_status('Error: Images are all the same scenario code')
             return
 
-        # Check if there are black codes that need recovery
-        # We need to check if the video continues (user scrolled backwards) to enable second pass
+        # Check if the video continues (user scrolled backwards) to enable second pass
         video_continues = False
-        if black_code_recovery:
-            # Check if there are more frames after the forward pass
+        
+        # We need to know if the video continues regardless of black codes or randoms
+        if len(result_arr) > 0:
             test_cam = cv2.VideoCapture('videos/' + filename)
-            test_cam.set(cv2.CAP_PROP_POS_FRAMES, currentFrame + 15)  # Skip ahead past the "same frames"
-            ret_test, _ = test_cam.read()
-            video_continues = ret_test
-            test_cam.release()
+            test_cam.set(cv2.CAP_PROP_POS_FRAMES, currentFrame + 1)
             
-            if not video_continues:
+            # Look ahead up to 60 frames to see if there is any actual new content
+            # (bypassing the final fade-out/static screen of the pass 1)
+            frames_checked = 0
+            while frames_checked < 60:
+                ret_test, frame_test = test_cam.read()
+                if not ret_test:
+                    break
+                    
+                if frame_test.shape in SUPPORTED_RESOLUTIONS and SUPPORTED_RESOLUTIONS[frame_test.shape] is not None:
+                    frame_test = resize_frame(frame_test)
+                
+                # If we found a frame that is different from the last frame of Pass 1, 
+                # then a second pass exists.
+                if not compare_image_diff(frame, frame_test):
+                    video_continues = True
+                    break
+                    
+                frames_checked += 1
+                
+            test_cam.release()
+        
+        if not video_continues:
+            if black_code_recovery:
                 raise BlackCodeException('Black code detected but video does not continue - unable to recover')
+            if flagRand:
+                raise Exception('You must scroll back through your scenarios when any of your scenarios have a random rotation!')
 
         # unnecessary to run the rest of the code if there are no random weapons AND no black codes needing recovery
-        if not flagRand and not black_code_recovery:
+        # OR if there is simply no second pass recorded (and the above exceptions weren't triggered)
+        if not video_continues or (not flagRand and not black_code_recovery):
             if print_to_file:
                 with open('out/' + filename[:-4] + '/full_scenarios.csv', 'w', newline='') as csv_file:
                     writer = csv.writer(csv_file)
