@@ -187,6 +187,13 @@ class BlackCodeException(Exception):
         self.message = message
         super().__init__(self.message)
 
+class DateMismatchException(Exception):
+    """Raised when a date mismatch is detected in pass 2.
+    The video will be moved to the 'mismatch' folder and processing will continue."""
+    def __init__(self, message="Date mismatch detected - moving video to mismatch folder"):
+        self.message = message
+        super().__init__(self.message)
+
 
 def leven(tess, key, lang='en'):
     """
@@ -664,6 +671,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
     initRow = row
     result_arr = []
     black_code_recovery = {}  # Track scenarios needing code recovery: dateFile -> result_arr index
+    process_log = []
     try:
         while(ret and not flagEqual):
             frame = nextFrame
@@ -713,6 +721,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                     if date != nextDate:
                         progress.clear_line()
                         print_status(f'Black code on frame {currentFrame}, will attempt recovery')
+                        process_log.append(f'Black code on frame {currentFrame}, will attempt recovery')
                         frames_same = False  # Treat as different frame to process this scenario
                         black_code_on_current_frame = True
                     else:
@@ -963,22 +972,10 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             dateFile = dateFile.replace('/', ' ')
             if dateOrig != dateFile:
                 progress2.clear_line()
-                print_status(f'Warning: Date mismatch in Pass 2: {dateOrig} vs {dateFile}')
-                file_mode = 'a' if os.path.exists('out/log.txt') else 'w'
-                with open('out/log.txt', file_mode) as f:
-                    f.write('date: ' + dateFile + ', frame: ' + str(currentFrame) + ', prevFrame: ' + str(prevFrame) + ', row: ' + str(row) + '\n')
-                frameNum = '_' + str(prevFrame) + '_' + str(currentFrame) + '_'
-                if frame is not None and frame.size > 0:
-                    cv2.imwrite('out/frame' + frameNum + filename[:-4] + '.png', frame)
-                cam2 = cv2.VideoCapture('videos/' + filename)
-                for i in range(0, prevFrame):
-                    cam2.read()
-                ret, prevF = cam2.read()
-                if ret and needs_resize:
-                    prevF = resize_frame(prevF)
-                if prevF is not None and prevF.size > 0:
-                    cv2.imwrite('out/pFrame' + frameNum + filename[:-4] + '.png', prevF)
-                cam2.release()
+                msg = f'Warning: Date mismatch in Pass 2: {dateOrig} vs {dateFile} at frame {currentFrame}'
+                print_status(msg)
+                process_log.append(msg)
+                raise DateMismatchException(msg)
             ret, nextFrame = cam.read()
             if ret and needs_resize:
                 nextFrame = resize_frame(nextFrame)
@@ -1015,6 +1012,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 
                 progress2.clear_line()
                 print_status(f'Recovered code for {date}')
+                process_log.append(f'Recovered code for {date}')
                 cv2.imwrite('out/' + dateOrigFile, code)
                 
                 # Update result_arr with code image reference
@@ -1138,11 +1136,14 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 if os.path.isfile('out/' + toRemove[i][0]):
                     os.remove('out/' + toRemove[i][0])
         cam.release()
-    except (BlackCodeException, KeyboardInterrupt) as e:
+    except (BlackCodeException, DateMismatchException, KeyboardInterrupt) as e:
         if isinstance(e, KeyboardInterrupt):
             print_status('\nScript interrupted by user')
+            # Ignore further Ctrl+C during cleanup to ensure graceful exit finishes
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
         else:
             print_status(str(e))
+            process_log.append(f'Error: {str(e)}')
         cam.release()
         if print_to_file:
             if os.path.exists('out/' + filename[:-4]):
@@ -1161,13 +1162,29 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                         time.sleep(0.5)
                     file = file_list[0]
                     file.Trash()
-        # For black code, move video to black folder; for KeyboardInterrupt, just re-raise
+        # Move video to specific folders; for KeyboardInterrupt, just re-raise
         if isinstance(e, BlackCodeException):
-            black_folder = 'videos/black'
-            if not os.path.exists(black_folder):
-                os.makedirs(black_folder)
-            shutil.move('videos/' + filename, new_path(black_folder + '/' + filename))
-            print_status(f'Moved {filename} to {black_folder}/')
+            dest_folder = 'videos/black'
+            if not os.path.exists(dest_folder):
+                os.makedirs(dest_folder)
+            shutil.move('videos/' + filename, new_path(dest_folder + '/' + filename))
+            print_status(f'Moved {filename} to {dest_folder}/')
+        elif isinstance(e, DateMismatchException):
+            dest_folder = 'videos/mismatch'
+            if not os.path.exists(dest_folder):
+                os.makedirs(dest_folder)
+            shutil.move('videos/' + filename, new_path(dest_folder + '/' + filename))
+            print_status(f'Moved {filename} to {dest_folder}/')
+            
+        if isinstance(e, (BlackCodeException, DateMismatchException)):
+            file_mode = 'a' if os.path.exists('out/log.txt') else 'w'
+            with open('out/log.txt', file_mode) as f:
+                f.write(f'--- {filename} ---\n')
+                for message in process_log:
+                    f.write(message + '\n')
+                if black_code_recovery:
+                    f.write(f'Black codes mapped: {len(black_code_recovery)}\n')
+                f.write('\n')
         raise  # Re-raise to signal caller
     except Exception as e:
         print_status(f'Error: {e}')
@@ -1209,8 +1226,8 @@ if __name__ == '__main__':
                 for idx, filename in enumerate(video_files, 1):
                     try:
                         main(filename, args.lang, args.print, video_num=idx, total_videos=total_videos)
-                    except BlackCodeException:
-                        print_status(f'Continuing after black code in {filename}')
+                    except (BlackCodeException, DateMismatchException) as e:
+                        print_status(f'Continuing after error in {filename}: {type(e).__name__}')
                         continue
         else:
             total_videos = len(args.vids)
@@ -1221,8 +1238,8 @@ if __name__ == '__main__':
                         main(vid, args.lang, args.print, video_num=idx, total_videos=total_videos)
                     else:
                         print_status(f'{vid} does not exist in /videos directory')
-                except BlackCodeException:
-                    print_status(f'Continuing after black code in {vid}')
+                except (BlackCodeException, DateMismatchException) as e:
+                    print_status(f'Continuing after error in {vid}: {type(e).__name__}')
                     continue
     except KeyboardInterrupt:
         print_status('\nStopping script due to user interrupt')
