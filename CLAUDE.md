@@ -1,0 +1,2 @@
+Always use conda activate s3 when running any python scripts
+When running vid2data.py for testing purposes, remember that -l is an option for when the date outputs don't seem correct. currently, the decision on the flag is completely manual, so it is difficult to automatically determine when it should be used
