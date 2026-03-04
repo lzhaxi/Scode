@@ -194,6 +194,13 @@ class DateMismatchException(Exception):
         self.message = message
         super().__init__(self.message)
 
+class MissingSecondPassException(Exception):
+    """Raised when random weapons or black codes necessitate a second pass but none is found.
+    The video will be moved to the 'missing_pass' folder and processing will continue."""
+    def __init__(self, message="Missing second pass detected - moving video to missing_pass folder"):
+        self.message = message
+        super().__init__(self.message)
+
 
 def leven(tess, key, lang='en'):
     """
@@ -888,10 +895,10 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             test_cam = cv2.VideoCapture('videos/' + filename)
             test_cam.set(cv2.CAP_PROP_POS_FRAMES, currentFrame + 1)
             
-            # Look ahead up to 60 frames to see if there is any actual new content
+            # Look ahead up to 120 frames (2 seconds) to see if there is any actual new content
             # (bypassing the final fade-out/static screen of the pass 1)
             frames_checked = 0
-            while frames_checked < 60:
+            while frames_checked < 120:
                 ret_test, frame_test = test_cam.read()
                 if not ret_test:
                     break
@@ -911,9 +918,9 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
         
         if not video_continues:
             if black_code_recovery:
-                raise BlackCodeException('Black code detected but video does not continue - unable to recover')
+                raise MissingSecondPassException('Missing Second Pass: Black code detected but video does not continue - unable to recover')
             if flagRand:
-                raise Exception('You must scroll back through your scenarios when any of your scenarios have a random rotation!')
+                raise MissingSecondPassException('Missing Second Pass: You must scroll back through your scenarios when any of your scenarios have a random rotation!')
 
         # unnecessary to run the rest of the code if there are no random weapons AND no black codes needing recovery
         # OR if there is simply no second pass recorded (and the above exceptions weren't triggered)
@@ -1136,7 +1143,7 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 if os.path.isfile('out/' + toRemove[i][0]):
                     os.remove('out/' + toRemove[i][0])
         cam.release()
-    except (BlackCodeException, DateMismatchException, KeyboardInterrupt) as e:
+    except (BlackCodeException, DateMismatchException, MissingSecondPassException, KeyboardInterrupt) as e:
         if isinstance(e, KeyboardInterrupt):
             print_status('\nScript interrupted by user')
             # Ignore further Ctrl+C during cleanup to ensure graceful exit finishes
@@ -1175,8 +1182,14 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 os.makedirs(dest_folder)
             shutil.move('videos/' + filename, new_path(dest_folder + '/' + filename))
             print_status(f'Moved {filename} to {dest_folder}/')
+        elif isinstance(e, MissingSecondPassException):
+            dest_folder = 'videos/missing_pass'
+            if not os.path.exists(dest_folder):
+                os.makedirs(dest_folder)
+            shutil.move('videos/' + filename, new_path(dest_folder + '/' + filename))
+            print_status(f'Moved {filename} to {dest_folder}/')
             
-        if isinstance(e, (BlackCodeException, DateMismatchException)):
+        if isinstance(e, (BlackCodeException, DateMismatchException, MissingSecondPassException)):
             file_mode = 'a' if os.path.exists('out/log.txt') else 'w'
             with open('out/log.txt', file_mode) as f:
                 f.write(f'--- {filename} ---\n')
@@ -1226,7 +1239,7 @@ if __name__ == '__main__':
                 for idx, filename in enumerate(video_files, 1):
                     try:
                         main(filename, args.lang, args.print, video_num=idx, total_videos=total_videos)
-                    except (BlackCodeException, DateMismatchException) as e:
+                    except (BlackCodeException, DateMismatchException, MissingSecondPassException) as e:
                         print_status(f'Continuing after error in {filename}: {type(e).__name__}')
                         continue
         else:
@@ -1238,7 +1251,7 @@ if __name__ == '__main__':
                         main(vid, args.lang, args.print, video_num=idx, total_videos=total_videos)
                     else:
                         print_status(f'{vid} does not exist in /videos directory')
-                except (BlackCodeException, DateMismatchException) as e:
+                except (BlackCodeException, DateMismatchException, MissingSecondPassException) as e:
                     print_status(f'Continuing after error in {vid}: {type(e).__name__}')
                     continue
     except KeyboardInterrupt:
