@@ -594,11 +594,9 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
             # Authenticate if they're not there
             gauth.LocalWebserverAuth()
         elif gauth.access_token_expired:
-            # Refresh them if expired
-            try:
-                gauth.Refresh()
-            except RefreshError as e:
-                gauth.LocalWebserverAuth()
+            # Remove expired creds
+            os.remove("creds.json")
+            gauth.LocalWebserverAuth()
         else:
             # Initialize the saved creds
             gauth.Authorize()
@@ -711,13 +709,15 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                     else:
                         frames_same = img_diff or date == nextDate
                 except BlackCodeException:
-                    # Black code detected - we'll try to recover it on second pass
-                    progress.clear_line()
-                    print_status(f'Black code on frame {currentFrame}, will attempt recovery')
-                    frames_same = False  # Treat as different frame to process this scenario
-                    # Mark that we need to capture this scenario's code on second pass
-                    # (We'll add to black_code_recovery after building dateFile)
-                    black_code_on_current_frame = True
+                    # Black code detected - but only process if it's the last frame of the scenario
+                    if date != nextDate:
+                        progress.clear_line()
+                        print_status(f'Black code on frame {currentFrame}, will attempt recovery')
+                        frames_same = False  # Treat as different frame to process this scenario
+                        black_code_on_current_frame = True
+                    else:
+                        frames_same = True
+                        black_code_on_current_frame = False
                 else:
                     black_code_on_current_frame = False
                 
