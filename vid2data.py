@@ -472,7 +472,7 @@ def get_hazard(info, lang='en'):
         digits.append(isolate_letter(haz, stats[i], [24, 21]))
     digits = [x for _, x in sorted(zip(centroids[1:, 0], digits))]
     hazard = ''
-    digit_list = '0123456789'
+    digit_list = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'empty']
 
     # go through each digit and compare each digit to the ground truth data and choose the one that is most similar
     for digit_img in digits:
@@ -480,7 +480,9 @@ def get_hazard(info, lang='en'):
         for digit in digit_list:
             digit_base = get_cached_image('ground_truths/hazard_data/' + digit + '.png')
             results.append(ssim(digit_img, digit_base))
-        hazard += digit_list[np.argmax(results)]
+        best_match = digit_list[np.argmax(results)]
+        if best_match != 'empty':
+            hazard += best_match
     # sometimes stats gets another element in its array, delete it and log it
     if len(hazard) > 3:
         #print('Possible error, hazard was ' + hazard + ', image logged. Deleting fourth digit, correct manually if wrong.')
