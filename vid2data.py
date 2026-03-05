@@ -585,7 +585,7 @@ def new_path(path):
         path = path_next + '_' + str(counter) + path_ext
     return path
 
-def main(filename, lang='en', print_to_file=False, single=False, from_pics=False, video_num=None, total_videos=None):
+def main(filename, lang='en', print_to_file=False, single=False, from_pics=False, video_num=None, total_videos=None, ignore=False):
     """
     Parameters:
     filename: name of file to be read
@@ -982,7 +982,11 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 msg = f'Warning: Date mismatch in Pass 2: {dateOrig} vs {dateFile} at frame {currentFrame}'
                 print_status(msg)
                 process_log.append(msg)
-                raise DateMismatchException(msg)
+                if not ignore:
+                    raise DateMismatchException(msg)
+                else:
+                    print_status("Ignoring date mismatch due to --ignore flag.")
+                    process_log.append("Ignoring date mismatch due to --ignore flag.")
             ret, nextFrame = cam.read()
             if ret and needs_resize:
                 nextFrame = resize_frame(nextFrame)
@@ -1226,6 +1230,7 @@ if __name__ == '__main__':
     parser.add_argument('vids', type=str, help='Filenames of scenario videos. Videos must be in /videos directory', nargs='*')
     parser.add_argument('--lang', '-l', type=str, default='en', help='Language, options are \'en\' or \'eu\'')
     parser.add_argument('--print', '-p', help="Prints to csv instead of uploading to google sheets", action='store_true')
+    parser.add_argument('--ignore', '-i', help="Ignore Date Mismatch errors and continue processing the scenario", action='store_true')
     args = parser.parse_args()
     try:
         if not args.vids:
@@ -1238,7 +1243,7 @@ if __name__ == '__main__':
                 print_status(f'Found {total_videos} video(s) to process')
                 for idx, filename in enumerate(video_files, 1):
                     try:
-                        main(filename, args.lang, args.print, video_num=idx, total_videos=total_videos)
+                        main(filename, args.lang, args.print, video_num=idx, total_videos=total_videos, ignore=args.ignore)
                     except (BlackCodeException, DateMismatchException, MissingSecondPassException) as e:
                         print_status(f'Continuing after error in {filename}: {type(e).__name__}')
                         continue
@@ -1248,7 +1253,7 @@ if __name__ == '__main__':
             for idx, vid in enumerate(args.vids, 1):
                 try:
                     if os.path.exists('videos/' + vid):
-                        main(vid, args.lang, args.print, video_num=idx, total_videos=total_videos)
+                        main(vid, args.lang, args.print, video_num=idx, total_videos=total_videos, ignore=args.ignore)
                     else:
                         print_status(f'{vid} does not exist in /videos directory')
                 except (BlackCodeException, DateMismatchException, MissingSecondPassException) as e:
