@@ -1168,13 +1168,16 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 os.remove('out/' + toRemove[i][0])
                 if not print_to_file:
                     # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
-                    while True:
-                        file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
-                        if len(file_list) == 1:
-                            break
-                        time.sleep(0.5)
-                    file = file_list[0]
-                    file.Trash()
+                    try:
+                        for _ in range(10):
+                            file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
+                            if len(file_list) == 1:
+                                file = file_list[0]
+                                file.Trash()
+                                break
+                            time.sleep(0.5)
+                    except Exception as drive_err:
+                        print_status(f'Warning: Google Drive cleanup failed for {toRemove[i][0]}: {drive_err}')
         # Move video to specific folders; for KeyboardInterrupt, just re-raise
         if isinstance(e, BlackCodeException):
             dest_folder = 'videos/black'
@@ -1218,13 +1221,16 @@ def main(filename, lang='en', print_to_file=False, single=False, from_pics=False
                 os.remove('out/' + toRemove[i][0])
                 if not print_to_file:
                     # the file definitely exists, but for some reason ListFile sometimes returns empty so you just have to keep querying it
-                    while True:
-                        file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
-                        if len(file_list) == 1:
-                            break
-                        time.sleep(0.5)
-                    file = file_list[0]
-                    file.Trash()
+                    try:
+                        for _ in range(10):
+                            file_list = drive.ListFile({'q': f"'{FOLDERID}' in parents and title='{toRemove[i][0]}' and trashed=false"}).GetList()
+                            if len(file_list) == 1:
+                                file = file_list[0]
+                                file.Trash()
+                                break
+                            time.sleep(0.5)
+                    except Exception as drive_err:
+                        print_status(f'Warning: Google Drive cleanup failed for {toRemove[i][0]}: {drive_err}')
         raise e
 
 if __name__ == '__main__':

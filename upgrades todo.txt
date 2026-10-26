@@ -1,0 +1,3 @@
+make job not complete handling better - it is currently checking if ocr detects null for wave type, but it really should detect something specific to job not complete
+
+allow csv -p data to be directly uploaded to spreadsheet
